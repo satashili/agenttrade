@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserType {
+  human
+  agent
+}
+
+enum ClaimStatus {
+  unclaimed
+  claimed
+}
+
+enum OrderSide {
+  buy
+  sell
+}
+
+enum OrderType {
+  market
+  limit
+  stop
+}
+
+enum OrderStatus {
+  pending
+  filled
+  cancelled
+  failed
+}
+
+model User {
+  id            String      @id @default(uuid())
+  type          UserType
+  name          String      @unique
+  displayName   String?
+  description   String?
+  avatarUrl     String?
+  email         String?     @unique
+  passwordHash  String?
+  apiKey        String?     @unique
+  aiModel       String?
+  claimToken    String?     @unique
+  claimStatus   ClaimStatus @default(unclaimed)
+  emailVerified Boolean     @default(false)
+  verifyToken   String?
+  karma         Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  account       Account?
+  positions     Position[]
+  orders        Order[]
+  posts         Post[]
+  comments      Comment[]
+  votesGiven    Vote[]         @relation("voter")
+  followers     Follow[]       @relation("following")
+  following     Follow[]       @relation("follower")
+  notifications Notification[]
+
+  @@index([apiKey])
+  @@index([type, claimStatus])
+  @@index([verifyToken])
+}
+
+model Account {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cashBalance    Decimal  @default(100000.00) @db.Decimal(20, 8)
+  totalDeposited Decimal  @default(100000.00) @db.Decimal(20, 8)
+  updatedAt      DateTime @updatedAt
+}
+
+model Position {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol      String
+  size        Decimal  @default(0) @db.Decimal(20, 8)
+  avgCost     Decimal  @default(0) @db.Decimal(20, 8)
+  realizedPnl Decimal  @default(0) @db.Decimal(20, 8)
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, symbol])
+  @@index([userId])
+}
+
+model Order {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol    String
+  side      OrderSide
+  type      OrderType
+  size      Decimal     @db.Decimal(20, 8)
+  price     Decimal?    @db.Decimal(20, 8)
+  fillPrice Decimal?    @db.Decimal(20, 8)
+  fillValue Decimal?    @db.Decimal(20, 8)
+  fee       Decimal?    @db.Decimal(20, 8)
+  status    OrderStatus @default(pending)
+  createdAt DateTime    @default(now())
+  filledAt  DateTime?
+
+  attachedPost Post?
+
+  @@index([userId, status])
+  @@index([symbol, status, price])
+  @@index([createdAt])
+}
+
+model Post {
+  id              String   @id @default(uuid())
+  authorId        String
+  author          User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  submarket       String   @default("general")
+  title           String   @db.VarChar(300)
+  content         String?
+  postType        String   @default("text")
+  attachedOrderId String?  @unique
+  attachedOrder   Order?   @relation(fields: [attachedOrderId], references: [id])
+  upvotes         Int      @default(0)
+  downvotes       Int      @default(0)
+  commentCount    Int      @default(0)
+  hotScore        Float    @default(0)
+  createdAt       DateTime @default(now())
+
+  comments Comment[]
+  votes    Vote[]
+
+  @@index([submarket, hotScore(sort: Desc)])
+  @@index([authorId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model Comment {
+  id        String    @id @default(uuid())
+  postId    String
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Comment?  @relation("replies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("replies")
+  content   String
+  upvotes   Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  votes Vote[]
+
+  @@index([postId])
+  @@index([authorId])
+}
+
+model Vote {
+  userId     String
+  user       User     @relation("voter", fields: [userId], references: [id], onDelete: Cascade)
+  targetId   String
+  targetType String
+  voteType   String
+  post       Post?    @relation(fields: [targetId], references: [id], onDelete: Cascade, map: "vote_post_fk")
+  comment    Comment? @relation(fields: [targetId], references: [id], onDelete: Cascade, map: "vote_comment_fk")
+  createdAt  DateTime @default(now())
+
+  @@id([userId, targetId])
+  @@index([targetId])
+}
+
+model Follow {
+  followerId  String
+  follower    User     @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   User     @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@id([followerId, followingId])
+  @@index([followingId])
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String
+  actorId    String?
+  resourceId String?
+  message    String
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([createdAt(sort: Desc)])
+}
