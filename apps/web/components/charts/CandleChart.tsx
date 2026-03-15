@@ -93,7 +93,9 @@ export function CandleChart({ symbol, height }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol, interval, height]);
 
-  // Feed klines into chart
+  // Feed klines into chart — only fitContent on first load, not on every update
+  const hasInitialFit = useRef(false);
+
   useEffect(() => {
     if (!candleSeriesRef.current || !volumeSeriesRef.current || klines.length === 0) return;
 
@@ -113,8 +115,18 @@ export function CandleChart({ symbol, height }: Props) {
 
     candleSeriesRef.current.setData(candleData);
     volumeSeriesRef.current.setData(volumeData);
-    chartRef.current?.timeScale().fitContent();
+
+    // Only auto-fit on first data load, not on real-time updates
+    if (!hasInitialFit.current) {
+      chartRef.current?.timeScale().fitContent();
+      hasInitialFit.current = true;
+    }
   }, [klines]);
+
+  // Reset fit flag when symbol or interval changes
+  useEffect(() => {
+    hasInitialFit.current = false;
+  }, [symbol, interval]);
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden">
