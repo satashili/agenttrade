@@ -1,102 +1,80 @@
 'use client';
+import { useRef, useEffect, useState } from 'react';
 import { useBinanceTicker } from '@/hooks/useBinanceWS';
 
-interface Props {
-  symbol: 'BTC' | 'ETH' | 'SOL';
-}
+interface Props { symbol: 'BTC' | 'ETH' | 'SOL'; }
 
-function formatVolume(v: number): string {
-  if (v >= 1_000_000) return (v / 1_000_000).toFixed(2) + 'M';
-  if (v >= 1_000) return (v / 1_000).toFixed(2) + 'K';
+function fmtVol(v: number): string {
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
   return v.toFixed(2);
 }
 
-function formatPrice(price: number, symbol: string): string {
-  const decimals = symbol === 'BTC' ? 2 : symbol === 'ETH' ? 2 : 4;
-  return price.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+function fmtPrice(p: number, sym: string): string {
+  const d = sym === 'SOL' ? 4 : 2;
+  return p.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
 export function TickerBar({ symbol }: Props) {
   const { ticker, priceDirection } = useBinanceTicker(symbol);
+  const prevDir = useRef(priceDirection);
+  const [flash, setFlash] = useState(false);
 
-  const isPositive = ticker ? ticker.priceChangePct >= 0 : true;
-  const priceColor = priceDirection === 'up'
-    ? 'text-green-trade'
-    : priceDirection === 'down'
-      ? 'text-red-trade'
-      : 'text-white';
+  // Only flash briefly on direction change, not every tick
+  useEffect(() => {
+    if (priceDirection && priceDirection !== prevDir.current) {
+      setFlash(true);
+      const t = setTimeout(() => setFlash(false), 300);
+      prevDir.current = priceDirection;
+      return () => clearTimeout(t);
+    }
+  }, [priceDirection]);
+
+  const isUp = ticker ? ticker.priceChangePct >= 0 : true;
+  const dirColor = flash
+    ? (priceDirection === 'up' ? 'text-[#0ECB81]' : 'text-[#F6465D]')
+    : 'text-[#eaecef]';
 
   return (
-    <div
-      className="flex items-center gap-4 px-4 border-b border-border shrink-0"
-      style={{ height: '36px', backgroundColor: '#0B0E11', fontFamily: "'DM Mono', monospace" }}
-    >
-      {/* Symbol */}
+    <div className="flex items-center gap-5 px-4 h-9 border-b border-border shrink-0 bg-[#0B0E11]" style={{ fontFamily: "'DM Mono', monospace" }}>
       <div className="flex items-center gap-2 shrink-0">
-        <span className="text-sm font-bold text-white">{symbol}/USDT</span>
-        <span className="text-[9px] bg-accent/20 text-accent px-1.5 py-px rounded font-medium">Perp</span>
+        <span className="text-sm font-bold text-white tracking-tight">{symbol}USDT</span>
+        <span className="text-[8px] bg-[#2b3139] text-slate-400 px-1 py-px rounded">SPOT</span>
       </div>
 
-      {/* Divider */}
       <div className="w-px h-4 bg-border" />
 
-      {/* Price */}
-      <div className="shrink-0">
-        {ticker ? (
-          <span
-            className={`text-sm font-bold tabular-nums transition-colors duration-150 ${priceColor}`}
-          >
-            ${formatPrice(ticker.lastPrice, symbol)}
+      {ticker ? (
+        <>
+          <span className={`text-[15px] font-bold tabular-nums transition-colors duration-200 ${dirColor}`}>
+            {fmtPrice(ticker.lastPrice, symbol)}
           </span>
-        ) : (
-          <span className="text-sm text-slate-500 animate-pulse">—</span>
-        )}
-      </div>
 
-      {/* Divider */}
-      <div className="w-px h-4 bg-border" />
-
-      {/* 24h Change */}
-      <div className="flex flex-col items-end shrink-0">
-        <span className="text-[9px] text-slate-500 leading-none">24h Change</span>
-        {ticker ? (
-          <span className={`text-xs tabular-nums font-medium ${isPositive ? 'text-green-trade' : 'text-red-trade'}`}>
-            {isPositive ? '+' : ''}{ticker.priceChangePct.toFixed(2)}%
-          </span>
-        ) : (
-          <span className="text-xs text-slate-500">—</span>
-        )}
-      </div>
-
-      {/* 24h High */}
-      <div className="flex flex-col items-end shrink-0">
-        <span className="text-[9px] text-slate-500 leading-none">24h High</span>
-        {ticker ? (
-          <span className="text-xs tabular-nums text-slate-300">${formatPrice(ticker.high24h, symbol)}</span>
-        ) : (
-          <span className="text-xs text-slate-500">—</span>
-        )}
-      </div>
-
-      {/* 24h Low */}
-      <div className="flex flex-col items-end shrink-0">
-        <span className="text-[9px] text-slate-500 leading-none">24h Low</span>
-        {ticker ? (
-          <span className="text-xs tabular-nums text-slate-300">${formatPrice(ticker.low24h, symbol)}</span>
-        ) : (
-          <span className="text-xs text-slate-500">—</span>
-        )}
-      </div>
-
-      {/* 24h Volume */}
-      <div className="flex flex-col items-end shrink-0">
-        <span className="text-[9px] text-slate-500 leading-none">24h Volume</span>
-        {ticker ? (
-          <span className="text-xs tabular-nums text-slate-300">{formatVolume(ticker.volume24h)} {symbol}</span>
-        ) : (
-          <span className="text-xs text-slate-500">—</span>
-        )}
-      </div>
+          <div className="flex items-center gap-4 text-[11px]">
+            <div>
+              <span className="text-slate-500 mr-1">24h Change</span>
+              <span className={`tabular-nums font-medium ${isUp ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
+                {isUp ? '+' : ''}{ticker.priceChangePct.toFixed(2)}%
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500 mr-1">High</span>
+              <span className="tabular-nums text-slate-300">{fmtPrice(ticker.high24h, symbol)}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 mr-1">Low</span>
+              <span className="tabular-nums text-slate-300">{fmtPrice(ticker.low24h, symbol)}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 mr-1">Vol(USDT)</span>
+              <span className="tabular-nums text-slate-300">{fmtVol(ticker.volume24h)}</span>
+            </div>
+          </div>
+        </>
+      ) : (
+        <span className="text-sm text-slate-600">Connecting...</span>
+      )}
     </div>
   );
 }
