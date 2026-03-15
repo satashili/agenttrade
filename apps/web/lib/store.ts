@@ -44,7 +44,7 @@ interface MarketState {
 export const useMarketStore = create<MarketState>((set) => ({
   prices: {},
   tradeActivity: [],
-  setPrices: (prices) => set({ prices }),
+  setPrices: (incoming) => set((state) => ({ prices: { ...state.prices, ...incoming } })),
   addTradeActivity: (activity) =>
     set((state) => ({
       tradeActivity: [{ ...activity, ts: Date.now() }, ...state.tradeActivity].slice(0, 50),
