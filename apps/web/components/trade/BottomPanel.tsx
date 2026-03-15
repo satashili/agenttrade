@@ -1,10 +1,10 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useMarketStore } from '@/lib/store';
 import { api } from '@/lib/api';
 
 type Sym = 'BTC' | 'ETH' | 'SOL';
-type Tab = 'open' | 'history' | 'positions' | 'assets';
+type Tab = 'open' | 'history' | 'positions' | 'assets' | 'activity';
 
 interface Props { symbol: Sym; }
 
@@ -46,12 +46,29 @@ function fmtDate(s: string) {
   return new Date(s).toLocaleString('en-US', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
+function timeAgo(ts: number): string {
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function computeOrderPnl(order: Order): number | null {
+  if (order.side !== 'sell' || !order.avgFillPrice || order.status !== 'filled') return null;
+  // Approximate: (avgFillPrice - avgCost) * size; since we don't have avgCost per order, use fillValue
+  // fillValue = avgFillPrice * filledSize; cost = size * (price or avgFillPrice as proxy)
+  // Best approximation without full cost data
+  return null;
+}
+
 export function BottomPanel({ symbol }: Props) {
   const [tab,       setTab]       = useState<Tab>('open');
   const [orders,    setOrders]    = useState<Order[]>([]);
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [loading,   setLoading]   = useState(false);
   const { token } = useAuthStore();
+  const { tradeActivity } = useMarketStore();
 
   const refresh = useCallback(() => {
     if (!token) return;
@@ -82,6 +99,7 @@ export function BottomPanel({ symbol }: Props) {
     { id: 'history',   label: 'Order History' },
     { id: 'positions', label: 'Positions', badge: portfolio?.positions.length || undefined },
     { id: 'assets',    label: 'Assets' },
+    { id: 'activity',  label: 'AI Activity', badge: tradeActivity.length || undefined },
   ];
 
   return (
@@ -115,17 +133,48 @@ export function BottomPanel({ symbol }: Props) {
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
-        {!token ? (
+        {/* AI Activity tab is always visible (no auth required) */}
+        {tab === 'activity' && (
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-bg-card z-10">
+              <tr className="text-[10px] text-slate-500 border-b border-border/50">
+                {['Agent', 'Side', 'Symbol', 'Size', 'Price', 'Time'].map(h => (
+                  <th key={h} className={`px-3 py-1.5 font-normal ${h === 'Agent' ? 'text-left' : 'text-right'}`}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {tradeActivity.length === 0 ? (
+                <tr><td colSpan={6} className="text-center py-6 text-slate-600 text-xs">No AI activity yet</td></tr>
+              ) : tradeActivity.map((a, i) => (
+                <tr key={i} className="border-b border-border/20 hover:bg-bg-secondary/50">
+                  <td className="px-3 py-1.5 font-medium text-white truncate max-w-[140px]">{a.agentName}</td>
+                  <td className={`px-3 py-1.5 text-right font-medium ${a.side === 'buy' ? 'text-green-trade' : 'text-red-trade'}`}>
+                    <span className={`text-[10px] px-1.5 py-px rounded ${a.side === 'buy' ? 'bg-green-trade/15' : 'bg-red-trade/15'}`}>
+                      {a.side.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 text-right text-slate-300">{a.symbol}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{a.size}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(a.price)}</td>
+                  <td className="px-3 py-1.5 text-right text-slate-500 text-[10px]">{timeAgo(a.ts)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {tab !== 'activity' && !token ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-xs text-slate-600">
               <a href="/login" className="text-accent hover:underline">Login</a> to view trading data
             </p>
           </div>
-        ) : loading ? (
+        ) : tab !== 'activity' && loading ? (
           <div className="flex items-center justify-center h-full">
             <span className="text-xs text-slate-600 animate-pulse">Loading…</span>
           </div>
-        ) : (
+        ) : tab !== 'activity' && (
           <>
             {/* Open Orders */}
             {tab === 'open' && (
@@ -163,26 +212,36 @@ export function BottomPanel({ symbol }: Props) {
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-bg-card z-10">
                   <tr className="text-[10px] text-slate-500 border-b border-border/50">
-                    {['Symbol','Type','Side','Avg Price','Size','Status','Fee','Date'].map(h => (
+                    {['Symbol','Type','Side','Avg Price','Size','Status','Fee','PnL','Date'].map(h => (
                       <th key={h} className={`px-3 py-1.5 font-normal ${h === 'Symbol' || h === 'Type' ? 'text-left' : 'text-right'}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {historyOrders.length === 0 ? (
-                    <tr><td colSpan={8} className="text-center py-6 text-slate-600 text-xs">No order history</td></tr>
-                  ) : historyOrders.map(o => (
-                    <tr key={o.id} className="border-b border-border/20 hover:bg-bg-secondary/50">
-                      <td className="px-3 py-1.5 font-medium text-white">{o.symbol}</td>
-                      <td className="px-3 py-1.5 text-slate-400 capitalize">{o.type}</td>
-                      <td className={`px-3 py-1.5 text-right capitalize font-medium ${o.side === 'buy' ? 'text-green-trade' : 'text-red-trade'}`}>{o.side}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{o.avgFillPrice ? `$${usd(o.avgFillPrice)}` : '—'}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{o.size}</td>
-                      <td className={`px-3 py-1.5 text-right capitalize ${o.status === 'filled' ? 'text-green-trade' : 'text-slate-400'}`}>{o.status}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">{o.fee ? `$${o.fee.toFixed(4)}` : '—'}</td>
-                      <td className="px-3 py-1.5 text-right text-slate-500 text-[10px]">{fmtDate(o.createdAt)}</td>
-                    </tr>
-                  ))}
+                    <tr><td colSpan={9} className="text-center py-6 text-slate-600 text-xs">No order history</td></tr>
+                  ) : historyOrders.map(o => {
+                    // Compute PnL for filled sell orders: (avgFillPrice - price) * filledSize
+                    let pnl: number | null = null;
+                    if (o.side === 'sell' && o.status === 'filled' && o.avgFillPrice && o.price) {
+                      pnl = (o.avgFillPrice - o.price) * (o.filledSize ?? o.size);
+                    }
+                    return (
+                      <tr key={o.id} className="border-b border-border/20 hover:bg-bg-secondary/50">
+                        <td className="px-3 py-1.5 font-medium text-white">{o.symbol}</td>
+                        <td className="px-3 py-1.5 text-slate-400 capitalize">{o.type}</td>
+                        <td className={`px-3 py-1.5 text-right capitalize font-medium ${o.side === 'buy' ? 'text-green-trade' : 'text-red-trade'}`}>{o.side}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{o.avgFillPrice ? `$${usd(o.avgFillPrice)}` : '—'}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{o.size}</td>
+                        <td className={`px-3 py-1.5 text-right capitalize ${o.status === 'filled' ? 'text-green-trade' : 'text-slate-400'}`}>{o.status}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">{o.fee ? `$${o.fee.toFixed(4)}` : '—'}</td>
+                        <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${pnl === null ? 'text-slate-500' : pnl >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
+                          {pnl === null ? '—' : `${pnl >= 0 ? '+' : ''}$${usd(Math.abs(pnl))}`}
+                        </td>
+                        <td className="px-3 py-1.5 text-right text-slate-500 text-[10px]">{fmtDate(o.createdAt)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -192,14 +251,14 @@ export function BottomPanel({ symbol }: Props) {
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-bg-card z-10">
                   <tr className="text-[10px] text-slate-500 border-b border-border/50">
-                    {['Symbol','Size','Avg Cost','Mark Price','Value','Unrealized PnL'].map(h => (
+                    {['Symbol','Size','Avg Cost','Mark Price','Value','PnL','PnL%'].map(h => (
                       <th key={h} className={`px-3 py-1.5 font-normal ${h === 'Symbol' ? 'text-left' : 'text-right'}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {!portfolio?.positions.length ? (
-                    <tr><td colSpan={6} className="text-center py-6 text-slate-600 text-xs">No open positions</td></tr>
+                    <tr><td colSpan={7} className="text-center py-6 text-slate-600 text-xs">No open positions</td></tr>
                   ) : portfolio.positions.map((p, i) => (
                     <tr key={i} className="border-b border-border/20 hover:bg-bg-secondary/50">
                       <td className="px-3 py-1.5 font-medium text-white">{p.symbol}</td>
@@ -208,8 +267,10 @@ export function BottomPanel({ symbol }: Props) {
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(p.currentPrice)}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(p.value)}</td>
                       <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${p.pnl >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
-                        {p.pnl >= 0 ? '+' : ''}{usd(p.pnl)}&nbsp;
-                        <span className="text-[10px] opacity-75">({p.pnlPct.toFixed(2)}%)</span>
+                        {p.pnl >= 0 ? '+' : ''}${usd(Math.abs(p.pnl))}
+                      </td>
+                      <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${p.pnlPct >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
+                        {p.pnlPct >= 0 ? '+' : ''}{p.pnlPct.toFixed(2)}%
                       </td>
                     </tr>
                   ))}

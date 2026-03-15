@@ -22,9 +22,31 @@ export default fp(async (fastify: FastifyInstance) => {
   );
 
   io.on('connection', (socket) => {
-    socket.on('subscribe', (userId: string) => {
+    let authenticatedName: string | null = null;
+
+    socket.on('subscribe', async (userId: string) => {
       // 订阅用户私有频道（用于接收成交通知）
       socket.join(`user:${userId}`);
+      // Look up agent name for chat
+      try {
+        const user = await fastify.prisma.user.findUnique({
+          where: { id: userId },
+          select: { name: true },
+        });
+        if (user) authenticatedName = user.name;
+      } catch (_) {
+        // ignore
+      }
+    });
+
+    socket.on('sendChat', (message: string) => {
+      if (!authenticatedName) return;
+      if (!message || typeof message !== 'string' || message.length > 500) return;
+      io.emit('chatMessage', {
+        agentName: authenticatedName,
+        message: message.trim(),
+        ts: Date.now(),
+      });
     });
   });
 

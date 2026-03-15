@@ -365,3 +365,90 @@ export function useBinanceAggTrades(symbol: string) {
 
   return { trades };
 }
+
+// ─── Ticker Interface ───────────────────────────────────────
+export interface TickerData {
+  symbol: string;
+  lastPrice: number;
+  priceChange: number;
+  priceChangePct: number;
+  high24h: number;
+  low24h: number;
+  volume24h: number;
+}
+
+// ─── Ticker Hook ────────────────────────────────────────────
+export function useBinanceTicker(symbol: string) {
+  const [ticker, setTicker] = useState<TickerData | null>(null);
+  const [priceDirection, setPriceDirection] = useState<'up' | 'down' | null>(null);
+  const wsActiveRef = useRef(false);
+  const lastPriceRef = useRef<number>(0);
+  const pair = BINANCE_PAIRS[symbol] || `${symbol}USDT`;
+  const pairLc = pair.toLowerCase();
+
+  const parseTicker = useCallback((d: any): TickerData => {
+    return {
+      symbol,
+      lastPrice: parseFloat(d.c ?? d.lastPrice),
+      priceChange: parseFloat(d.p ?? d.priceChange),
+      priceChangePct: parseFloat(d.P ?? d.priceChangePercent),
+      high24h: parseFloat(d.h ?? d.highPrice),
+      low24h: parseFloat(d.l ?? d.lowPrice),
+      volume24h: parseFloat(d.v ?? d.volume),
+    };
+  }, [symbol]);
+
+  const updateTicker = useCallback((data: TickerData) => {
+    if (lastPriceRef.current !== 0) {
+      if (data.lastPrice > lastPriceRef.current) setPriceDirection('up');
+      else if (data.lastPrice < lastPriceRef.current) setPriceDirection('down');
+    }
+    lastPriceRef.current = data.lastPrice;
+    setTicker(data);
+  }, []);
+
+  const fetchTicker = useCallback(async () => {
+    try {
+      const res = await fetch(`${REST_BASE}/ticker/24hr?symbol=${pair}`);
+      const d = await res.json();
+      if (d.lastPrice) {
+        updateTicker(parseTicker(d));
+      }
+    } catch { /* silent */ }
+  }, [pair, parseTicker, updateTicker]);
+
+  useEffect(() => {
+    lastPriceRef.current = 0;
+    setTicker(null);
+    setPriceDirection(null);
+    wsActiveRef.current = false;
+    fetchTicker();
+  }, [fetchTicker]);
+
+  useEffect(() => {
+    const stream = `${pairLc}@ticker`;
+
+    wsManager.subscribe(stream, (d) => {
+      if (d?.c) {
+        wsActiveRef.current = true;
+        updateTicker(parseTicker(d));
+      }
+    });
+
+    return () => {
+      wsManager.unsubscribe(stream);
+      wsActiveRef.current = false;
+    };
+  }, [pairLc, parseTicker, updateTicker]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (!wsActiveRef.current) {
+        fetchTicker();
+      }
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [fetchTicker]);
+
+  return { ticker, priceDirection };
+}

@@ -230,8 +230,10 @@ export interface ServerToClientEvents {
     size: number;
     price: number;
   }) => void;
+  chatMessage: (msg: { agentName: string; message: string; ts: number }) => void;
 }
 
 export interface ClientToServerEvents {
   subscribe: (userId: string) => void;
+  sendChat: (message: string) => void;
 }

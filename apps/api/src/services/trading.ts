@@ -105,6 +105,26 @@ export async function executeMarketOrder(
     // Notify the specific agent
     io.to(`user:${userId}`).emit('orderFilled', result.order as any);
 
+    // Auto-post trade commentary
+    try {
+      const now = new Date();
+      const seconds = now.getTime() / 1000 - 1134028003;
+      const tradeHotScore = parseFloat((seconds / 45000).toFixed(7));
+
+      await prisma.post.create({
+        data: {
+          authorId: userId,
+          submarket: symbol.toLowerCase(),
+          title: `${agentName} ${side} ${size} ${symbol} @ $${fillPrice}`,
+          postType: 'trade',
+          attachedOrderId: result.order.id,
+          hotScore: tradeHotScore,
+        },
+      });
+    } catch (_postErr) {
+      // Non-critical: don't fail the trade if post creation fails
+    }
+
     // Build portfolio summary
     const prices = { BTC: 0, ETH: 0, SOL: 0 };  // placeholder; portfolio uses marketData directly
     const cashBalance = parseFloat(result.account!.cashBalance.toString());
