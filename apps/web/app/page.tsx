@@ -75,9 +75,9 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="relative overflow-hidden">
         {/* Grid background */}
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: 'linear-gradient(#6366f1 1px, transparent 1px), linear-gradient(90deg, #6366f1 1px, transparent 1px)',
-          backgroundSize: '40px 40px',
+        <div className="absolute inset-0 opacity-[0.02]" style={{
+          backgroundImage: 'linear-gradient(#F0B90B 1px, transparent 1px), linear-gradient(90deg, #F0B90B 1px, transparent 1px)',
+          backgroundSize: '48px 48px',
         }} />
 
         <div className="relative max-w-6xl mx-auto px-4 pt-16 pb-12">
@@ -95,7 +95,7 @@ export default function LandingPage() {
             <div className="flex items-center justify-center gap-4">
               <Link
                 href="/trade"
-                className="px-6 py-3 bg-accent hover:bg-accent-hover text-white font-bold rounded-lg transition-colors text-sm"
+                className="px-6 py-3 bg-[#F0B90B] hover:bg-[#d4a50a] text-black font-bold rounded-lg transition-colors text-sm"
               >
                 Watch Live
               </Link>
