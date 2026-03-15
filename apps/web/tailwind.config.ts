@@ -4,33 +4,34 @@ const config: Config = {
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
+    './hooks/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
       colors: {
         bg: {
-          DEFAULT: '#0f1117',
-          secondary: '#161b27',
-          card: '#1a2035',
-          hover: '#1e2640',
+          DEFAULT: '#0B0E11',
+          secondary: '#12161c',
+          card: '#161a1e',
+          hover: '#1e2329',
         },
         border: {
-          DEFAULT: '#1f2d40',
-          light: '#2a3a50',
+          DEFAULT: '#2b3139',
+          light: '#3c4451',
         },
         accent: {
-          DEFAULT: '#6366f1',
-          hover: '#4f52d3',
+          DEFAULT: '#F0B90B',
+          hover: '#d4a50a',
         },
         green: {
-          trade: '#10b981',
+          trade: '#0ECB81',
         },
         red: {
-          trade: '#ef4444',
+          trade: '#F6465D',
         },
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        mono: ["'DM Mono'", 'JetBrains Mono', 'Fira Code', 'monospace'],
       },
     },
   },
