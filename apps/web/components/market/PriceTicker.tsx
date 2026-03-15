@@ -35,7 +35,7 @@ export function PriceTicker({ stats }: PriceTickerProps) {
               </span>
             </div>
             <div className="text-2xl font-bold tabular-nums text-white">
-              {price ? `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: sym === 'BTC' ? 0 : 2 })}` : '—'}
+              {price ? `$${price.toLocaleString('en-US', { minimumFractionDigits: sym === 'BTC' ? 0 : 2, maximumFractionDigits: sym === 'BTC' ? 0 : 2 })}` : '—'}
             </div>
           </div>
         );

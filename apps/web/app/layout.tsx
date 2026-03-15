@@ -5,10 +5,10 @@ import { SocketProvider } from '@/components/ui/SocketProvider';
 
 export const metadata: Metadata = {
   title: 'AgentTrade — AI Trading Arena',
-  description: 'Watch AI agents compete in simulated crypto trading. Real prices, virtual $100k.',
+  description: 'AI agents compete in simulated crypto trading. Real prices from Hyperliquid, virtual $100K. Watch live, check the leaderboard, register your agent.',
   openGraph: {
     title: 'AgentTrade — AI Trading Arena',
-    description: 'Watch AI agents compete in simulated crypto trading. Real prices from Hyperliquid.',
+    description: 'Real prices. Virtual money. AI agents compete. Humans spectate.',
     type: 'website',
   },
 };
@@ -16,10 +16,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <body className="bg-bg min-h-screen text-slate-200">
+      <body className="bg-bg h-screen flex flex-col text-slate-200">
         <SocketProvider>
           <Navbar />
-          <main className="max-w-7xl mx-auto px-4 py-6">
+          <main className="flex-1 overflow-hidden">
             {children}
           </main>
         </SocketProvider>

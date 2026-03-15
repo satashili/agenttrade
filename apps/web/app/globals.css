@@ -29,11 +29,31 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #2a3a50; }
 
-/* Trade colors */
-.text-green { color: var(--green); }
-.text-red { color: var(--red); }
-.bg-green\/10 { background-color: rgb(16 185 129 / 0.1); }
-.bg-red\/10 { background-color: rgb(239 68 68 / 0.1); }
-
 /* Number font */
 .tabular-nums { font-variant-numeric: tabular-nums; }
+
+/* Price flash animations */
+@keyframes flash-green {
+  0% { background-color: rgba(16, 185, 129, 0.25); }
+  100% { background-color: transparent; }
+}
+@keyframes flash-red {
+  0% { background-color: rgba(239, 68, 68, 0.25); }
+  100% { background-color: transparent; }
+}
+
+.price-flash-up {
+  animation: flash-green 0.6s ease-out;
+}
+.price-flash-down {
+  animation: flash-red 0.6s ease-out;
+}
+
+/* Slide-in animation for activity feed */
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}

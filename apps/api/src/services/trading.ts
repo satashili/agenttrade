@@ -10,7 +10,8 @@ export async function executeMarketOrder(
   side: 'buy' | 'sell',
   size: number,
   fillPrice: number,
-  io: SocketServer
+  io: SocketServer,
+  agentName: string
 ): Promise<{ success: boolean; error?: string; data?: any }> {
   const fillValue = size * fillPrice;
   const fee = fillValue * FEE_RATE;
@@ -94,7 +95,7 @@ export async function executeMarketOrder(
 
     // Broadcast trade activity to all clients
     io.emit('tradeActivity', {
-      agentName: '',  // will be filled by caller
+      agentName,
       symbol: symbol as any,
       side: side as any,
       size,

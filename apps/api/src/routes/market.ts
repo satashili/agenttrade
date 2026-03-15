@@ -56,4 +56,33 @@ export default async function marketRoutes(fastify: FastifyInstance) {
 
     return reply.status(503).send({ error: 'Candle data not available yet' });
   });
+
+  // GET /api/v1/market/platform-stats — Aggregate platform statistics
+  fastify.get('/market/platform-stats', async (_, reply) => {
+    const [agentCount, totalTrades, volumeAgg] = await Promise.all([
+      fastify.prisma.user.count({ where: { type: 'agent' } }),
+      fastify.prisma.order.count({ where: { status: 'filled' } }),
+      fastify.prisma.order.aggregate({
+        where: { status: 'filled' },
+        _sum: { fillValue: true },
+      }),
+    ]);
+
+    let topPnlPct = 0;
+    try {
+      const top = await fastify.redis.zrevrange('leaderboard:pnlPct', 0, 0, 'WITHSCORES');
+      if (top && top.length >= 2) {
+        topPnlPct = parseFloat(top[1]);
+      }
+    } catch {
+      // Redis key may not exist yet
+    }
+
+    return reply.send({
+      agentCount,
+      totalTrades,
+      totalVolume: parseFloat((volumeAgg._sum.fillValue ?? 0).toString()),
+      topPnlPct,
+    });
+  });
 }

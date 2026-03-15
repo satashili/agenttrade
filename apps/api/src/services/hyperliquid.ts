@@ -1,10 +1,32 @@
 import WebSocket from 'ws';
 import Redis from 'ioredis';
 import { Server as SocketServer } from 'socket.io';
+import type { BookLevel, OrderBookData } from '@agenttrade/types';
 
 const WS_URL = 'wss://api.hyperliquid.xyz/ws';
+const REST_URL = 'https://api.hyperliquid.xyz/info';
 const SYMBOLS = ['BTC', 'ETH', 'SOL'];
 const CANDLE_INTERVALS = ['1m', '5m', '15m', '1h', '4h', '1d'];
+
+// How many bars to backfill per interval
+const BACKFILL_BARS: Record<string, number> = {
+  '1m': 300,
+  '5m': 300,
+  '15m': 200,
+  '1h': 300,
+  '4h': 200,
+  '1d': 365,
+};
+
+// Interval durations in ms
+const INTERVAL_MS: Record<string, number> = {
+  '1m': 60_000,
+  '5m': 300_000,
+  '15m': 900_000,
+  '1h': 3_600_000,
+  '4h': 14_400_000,
+  '1d': 86_400_000,
+};
 
 interface OHLCVBar {
   time: number;
@@ -31,6 +53,12 @@ export class HyperliquidFeed {
     this.redis = redis;
     this.io = io;
     this.initBars();
+
+    // Backfill historical candles from REST API on startup
+    this.backfillAllCandles().catch(err => {
+      console.error('[Hyperliquid] Backfill error:', err.message);
+    });
+
     this.ws = new WebSocket(WS_URL);
 
     this.ws.on('open', () => {
@@ -43,11 +71,17 @@ export class HyperliquidFeed {
         subscription: { type: 'allMids' },
       }));
 
-      // Subscribe to candle data for each symbol
+      // Subscribe to candle data (all intervals) and L2 order book for each symbol
       for (const symbol of SYMBOLS) {
+        for (const interval of CANDLE_INTERVALS) {
+          this.ws!.send(JSON.stringify({
+            method: 'subscribe',
+            subscription: { type: 'candle', coin: symbol, interval },
+          }));
+        }
         this.ws!.send(JSON.stringify({
           method: 'subscribe',
-          subscription: { type: 'candle', coin: symbol, interval: '1m' },
+          subscription: { type: 'l2Book', coin: symbol },
         }));
       }
 
@@ -85,6 +119,8 @@ export class HyperliquidFeed {
       await this.handlePrices(msg.data.mids);
     } else if (msg.channel === 'candle') {
       await this.handleCandle(msg.data);
+    } else if (msg.channel === 'l2Book') {
+      this.handleL2Book(msg.data);
     } else if (msg.channel === 'pong') {
       // heartbeat response, ignore
     }
@@ -157,12 +193,107 @@ export class HyperliquidFeed {
       if (candles.length > 500) candles = candles.slice(-500);
     }
 
-    await this.redis.setex(cacheKey, 3600, JSON.stringify(candles));
+    // TTL: 24h — data is kept fresh by WebSocket updates
+    await this.redis.setex(cacheKey, 86400, JSON.stringify(candles));
 
     // Track 24h open from daily candle
     if (interval === '1d' && bar.time) {
       this.open24h[symbol] = bar.open;
     }
+  }
+
+  private handleL2Book(data: any) {
+    const coin: string = data.coin;
+    if (!SYMBOLS.includes(coin)) return;
+
+    // Hyperliquid l2Book: data.levels = [[bids...], [asks...]]
+    // Each level: { px: string, sz: string, n: number }
+    const rawBids: any[] = data.levels?.[0] ?? [];
+    const rawAsks: any[] = data.levels?.[1] ?? [];
+
+    const MAX_LEVELS = 15;
+
+    const bids: BookLevel[] = rawBids.slice(0, MAX_LEVELS).map((l: any) => ({
+      price: parseFloat(l.px),
+      size: parseFloat(l.sz),
+      count: l.n ?? 1,
+    }));
+
+    const asks: BookLevel[] = rawAsks.slice(0, MAX_LEVELS).map((l: any) => ({
+      price: parseFloat(l.px),
+      size: parseFloat(l.sz),
+      count: l.n ?? 1,
+    }));
+
+    const book: OrderBookData = {
+      symbol: coin as any,
+      bids,
+      asks,
+      ts: Date.now(),
+    };
+
+    // Broadcast to all clients
+    this.io.emit('orderBook', book);
+  }
+
+  /**
+   * Fetch historical candle data from Hyperliquid REST API for all symbols × intervals.
+   * This runs once on startup so the chart has data immediately.
+   */
+  private async backfillAllCandles() {
+    console.log('[Hyperliquid] Starting candle backfill...');
+    let filled = 0;
+
+    for (const symbol of SYMBOLS) {
+      for (const interval of CANDLE_INTERVALS) {
+        try {
+          const bars = BACKFILL_BARS[interval] || 200;
+          const endTime = Date.now();
+          const startTime = endTime - bars * INTERVAL_MS[interval];
+
+          const res = await fetch(REST_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'candleSnapshot',
+              req: { coin: symbol, interval, startTime, endTime },
+            }),
+          });
+
+          if (!res.ok) {
+            console.warn(`[Hyperliquid] Backfill ${symbol}:${interval} failed: HTTP ${res.status}`);
+            continue;
+          }
+
+          const raw: any[] = await res.json() as any[];
+          if (!Array.isArray(raw) || raw.length === 0) continue;
+
+          // Hyperliquid returns: { t: openMs, T: closeMs, s: symbol, i: interval, o, c, h, l, v, n }
+          const candles: OHLCVBar[] = raw.map((c: any) => ({
+            time: Math.floor(c.t / 1000),
+            open: parseFloat(c.o),
+            high: parseFloat(c.h),
+            low: parseFloat(c.l),
+            close: parseFloat(c.c),
+            volume: parseFloat(c.v),
+          }));
+
+          const cacheKey = `candles:${symbol}:${interval}`;
+          await this.redis.setex(cacheKey, 86400, JSON.stringify(candles));
+          filled++;
+
+          // Set 24h open from daily candle
+          if (interval === '1d' && candles.length > 0) {
+            const todayBar = candles[candles.length - 1];
+            this.open24h[symbol] = todayBar.open;
+          }
+        } catch (err: any) {
+          console.warn(`[Hyperliquid] Backfill ${symbol}:${interval} error:`, err.message);
+        }
+      }
+    }
+
+    console.log(`[Hyperliquid] Backfill complete: ${filled} datasets loaded`);
   }
 
   private async updateLeaderboard(prices: Record<string, number>) {

@@ -217,10 +217,26 @@ export interface PaginatedResponse<T> {
   nextCursor: string | null;
 }
 
+// ─── Order Book ─────────────────────────────────────────────────────────────
+
+export interface BookLevel {
+  price: number;
+  size: number;
+  count: number;
+}
+
+export interface OrderBookData {
+  symbol: Symbol;
+  bids: BookLevel[];
+  asks: BookLevel[];
+  ts: number;
+}
+
 // ─── WebSocket Events ────────────────────────────────────────────────────────
 
 export interface ServerToClientEvents {
   prices: (prices: Partial<Prices>) => void;
+  orderBook: (book: OrderBookData) => void;
   orderFilled: (order: Order) => void;
   notification: (notification: Notification) => void;
   tradeActivity: (activity: {

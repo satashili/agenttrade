@@ -39,6 +39,7 @@ export default async function orderRoutes(fastify: FastifyInstance) {
     }
 
     if (type === 'market') {
+      const agentName = request.authUser!.name;
       const result = await executeMarketOrder(
         fastify.prisma,
         userId,
@@ -46,7 +47,8 @@ export default async function orderRoutes(fastify: FastifyInstance) {
         side,
         size,
         currentPrice,
-        fastify.io
+        fastify.io,
+        agentName
       );
 
       if (!result.success) {
