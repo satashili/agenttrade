@@ -4,24 +4,12 @@ import { useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
 
 interface PlatformStats {
-  totalAgents: number;
-  activeAgents: number;
-  totalVolume: number;
+  agentCount: number;
   totalTrades: number;
+  totalVolume: number;
 }
 
-interface UserPortfolio {
-  account: {
-    balance: number;
-    totalValue: number;
-    totalPnl: number;
-    totalPnlPct: number;
-  };
-  rank?: number;
-}
-
-function formatCompact(n: number): string {
-  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
+function fmt(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return n.toFixed(0);
@@ -30,109 +18,44 @@ function formatCompact(n: number): string {
 export function StatusBar() {
   const { token, user } = useAuthStore();
   const [stats, setStats] = useState<PlatformStats | null>(null);
-  const [portfolio, setPortfolio] = useState<UserPortfolio | null>(null);
+  const [pnl, setPnl] = useState<{ totalValue: number; totalPnlPct: number } | null>(null);
 
   const fetchStats = useCallback(async () => {
-    try {
-      const data = await api.get<PlatformStats>('/api/v1/market/platform-stats');
-      setStats(data);
-    } catch { /* silent */ }
+    try { setStats(await api.get('/api/v1/market/platform-stats')); } catch {}
   }, []);
 
-  const fetchPortfolio = useCallback(async () => {
+  const fetchPnl = useCallback(async () => {
     if (!token) return;
     try {
-      const data = await api.get<UserPortfolio>('/api/v1/portfolio');
-      setPortfolio(data);
-    } catch { /* silent */ }
+      const p: any = await api.get('/api/v1/portfolio');
+      setPnl({ totalValue: p.totalValue, totalPnlPct: p.totalPnlPct });
+    } catch {}
   }, [token]);
 
+  useEffect(() => { fetchStats(); const i = setInterval(fetchStats, 30_000); return () => clearInterval(i); }, [fetchStats]);
   useEffect(() => {
-    fetchStats();
-    const interval = window.setInterval(fetchStats, 30000);
-    return () => window.clearInterval(interval);
-  }, [fetchStats]);
-
-  useEffect(() => {
-    if (token) {
-      fetchPortfolio();
-      const interval = window.setInterval(fetchPortfolio, 15000);
-      return () => window.clearInterval(interval);
-    } else {
-      setPortfolio(null);
-    }
-  }, [token, fetchPortfolio]);
+    if (token) { fetchPnl(); const i = setInterval(fetchPnl, 15_000); return () => clearInterval(i); }
+    else setPnl(null);
+  }, [token, fetchPnl]);
 
   return (
-    <div
-      className="flex items-center gap-3 px-3 border-b border-border text-[10px] shrink-0"
-      style={{ height: '32px', backgroundColor: '#0B0E11' }}
-    >
-      {/* Arena badge */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className="bg-accent text-black px-1.5 py-px rounded text-[9px] font-bold tracking-wide">ARENA</span>
-        {stats && (
-          <span className="text-slate-400 tabular-nums">{stats.totalAgents} agents</span>
-        )}
+    <div className="flex items-center h-7 px-3 border-b border-border/60 bg-[#0B0E11] text-[10px] shrink-0 gap-4">
+      <div className="flex items-center gap-1.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-[#0ECB81] animate-pulse" />
+        <span className="text-slate-500 font-medium">LIVE</span>
+        {stats && <span className="text-slate-400 tabular-nums">{stats.agentCount} agents</span>}
       </div>
-
-      {/* Divider */}
-      <div className="w-px h-3.5 bg-border" />
-
-      {/* Platform metrics */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1">
-          <span className="text-slate-500">Volume:</span>
-          <span className="text-slate-300 tabular-nums font-medium">
-            ${stats ? formatCompact(stats.totalVolume) : '—'}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="text-slate-500">Active:</span>
-          <span className="text-slate-300 tabular-nums font-medium">
-            {stats ? stats.activeAgents : '—'}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="text-slate-500">Trades:</span>
-          <span className="text-slate-300 tabular-nums font-medium">
-            {stats ? formatCompact(stats.totalTrades) : '—'}
-          </span>
-        </div>
-      </div>
-
-      {/* Spacer */}
+      <span className="text-slate-600">|</span>
+      <span className="text-slate-500">Vol <span className="text-slate-300 tabular-nums">${stats ? fmt(stats.totalVolume) : '—'}</span></span>
+      <span className="text-slate-500">Trades <span className="text-slate-300 tabular-nums">{stats ? fmt(stats.totalTrades) : '—'}</span></span>
       <div className="flex-1" />
-
-      {/* User info (when logged in) */}
-      {token && user && (
+      {token && user && pnl && (
         <div className="flex items-center gap-3">
-          <div className="w-px h-3.5 bg-border" />
-          <span className="text-accent font-medium truncate max-w-[120px]">
-            {user.displayName || user.name}
+          <span className="text-[#F0B90B] font-medium">{user.displayName || user.name}</span>
+          <span className="text-slate-500">Equity <span className="text-slate-200 tabular-nums">${fmt(pnl.totalValue)}</span></span>
+          <span className={`tabular-nums font-medium ${pnl.totalPnlPct >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
+            {pnl.totalPnlPct >= 0 ? '+' : ''}{pnl.totalPnlPct.toFixed(2)}%
           </span>
-          {portfolio && (
-            <>
-              <div className="flex items-center gap-1">
-                <span className="text-slate-500">Value:</span>
-                <span className="text-slate-300 tabular-nums font-medium">
-                  ${formatCompact(portfolio.account.totalValue)}
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-slate-500">PnL:</span>
-                <span className={`tabular-nums font-medium ${portfolio.account.totalPnlPct >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
-                  {portfolio.account.totalPnlPct >= 0 ? '+' : ''}{portfolio.account.totalPnlPct.toFixed(2)}%
-                </span>
-              </div>
-              {portfolio.rank && (
-                <div className="flex items-center gap-1">
-                  <span className="text-slate-500">Rank:</span>
-                  <span className="text-yellow-400 tabular-nums font-medium">#{portfolio.rank}</span>
-                </div>
-              )}
-            </>
-          )}
         </div>
       )}
     </div>
