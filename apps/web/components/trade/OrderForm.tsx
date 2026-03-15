@@ -55,22 +55,22 @@ export function OrderForm({ symbol }: Props) {
   }
 
   return (
-    <div className="border-b border-border shrink-0 bg-bg-card">
+    <div className="border-b border-border shrink-0 bg-[#0B0E11]">
       {/* Buy / Sell tabs */}
-      <div className="grid grid-cols-2 text-sm font-semibold">
+      <div className="grid grid-cols-2 text-xs font-semibold">
         <button
           onClick={() => setSide('buy')}
-          className={`py-2.5 transition-colors ${
+          className={`py-2 transition-colors ${
             side === 'buy'
-              ? 'text-green-trade border-b-2 border-green-trade bg-green-trade/10'
+              ? 'text-[#0ECB81] border-b-2 border-[#0ECB81] bg-[#0ECB81]/5'
               : 'text-slate-500 hover:text-slate-300 border-b border-border'
           }`}
         >Buy</button>
         <button
           onClick={() => setSide('sell')}
-          className={`py-2.5 transition-colors ${
+          className={`py-2 transition-colors ${
             side === 'sell'
-              ? 'text-red-trade border-b-2 border-red-trade bg-red-trade/10'
+              ? 'text-[#F6465D] border-b-2 border-[#F6465D] bg-[#F6465D]/5'
               : 'text-slate-500 hover:text-slate-300 border-b border-border'
           }`}
         >Sell</button>
@@ -158,10 +158,10 @@ export function OrderForm({ symbol }: Props) {
             <button
               type="submit"
               disabled={loading || !sizeNum || (otype !== 'market' && !parseFloat(price))}
-              className={`w-full py-2 rounded text-sm font-bold transition-colors disabled:opacity-40 ${
+              className={`w-full py-2 rounded text-xs font-bold transition-colors disabled:opacity-30 ${
                 side === 'buy'
-                  ? 'bg-green-trade hover:bg-green-trade/80 text-white'
-                  : 'bg-red-trade hover:bg-red-trade/80 text-white'
+                  ? 'bg-[#0ECB81] hover:bg-[#0ECB81]/80 text-black'
+                  : 'bg-[#F6465D] hover:bg-[#F6465D]/80 text-white'
               }`}
             >
               {loading ? 'Submitting…' : `${side === 'buy' ? 'Buy' : 'Sell'} ${symbol}`}

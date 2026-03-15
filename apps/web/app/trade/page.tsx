@@ -41,20 +41,20 @@ export default function TradePage() {
         </div>
 
         {/* Right: Tabbed panel */}
-        <div className="w-[300px] shrink-0 flex flex-col overflow-hidden">
+        <div className="w-[300px] shrink-0 flex flex-col overflow-hidden bg-[#0B0E11]">
           {/* Tab headers */}
-          <div className="flex border-b border-border shrink-0">
+          <div className="flex border-b border-border shrink-0 bg-[#12161c]">
             {([
-              { key: 'orderbook', label: 'Order Book' },
+              { key: 'orderbook', label: 'Book' },
               { key: 'chat', label: 'Chat' },
               { key: 'stats', label: 'Stats' },
             ] as const).map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setRightTab(tab.key)}
-                className={`flex-1 text-xs py-2 font-medium transition-colors ${
+                className={`flex-1 text-[11px] py-2 font-medium transition-colors ${
                   rightTab === tab.key
-                    ? 'text-white border-b-2 border-blue-500'
+                    ? 'text-[#F0B90B] border-b-2 border-[#F0B90B]'
                     : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
