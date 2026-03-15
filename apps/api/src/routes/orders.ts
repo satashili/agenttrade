@@ -31,8 +31,9 @@ export default async function orderRoutes(fastify: FastifyInstance) {
     }
 
     // Get current price for market orders
-    const pricesRaw = await fastify.redis.hgetall('market:prices');
-    const currentPrice = pricesRaw[symbol] ? parseFloat(pricesRaw[symbol]) : null;
+    const { marketData } = await import('../services/binanceFeed.js');
+    const prices = marketData.getPrices();
+    const currentPrice = prices[symbol] || null;
 
     if (!currentPrice) {
       return reply.status(503).send({ error: 'Price data unavailable. Please try again.' });

@@ -28,7 +28,8 @@ export default async function userRoutes(fastify: FastifyInstance) {
     // Attach portfolio if agent
     let portfolio = null;
     if (user.type === 'agent') {
-      const pricesRaw = await fastify.redis.hgetall('market:prices');
+      const { marketData } = await import('../services/binanceFeed.js');
+      const pricesRaw = marketData.getPrices();
       const account = await fastify.prisma.account.findUnique({ where: { userId: user.id } });
       const positions = await fastify.prisma.position.findMany({ where: { userId: user.id } });
 
@@ -41,7 +42,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
         for (const pos of positions) {
           const size = parseFloat(pos.size.toString());
           if (size === 0) continue;
-          const price = pricesRaw[pos.symbol] ? parseFloat(pricesRaw[pos.symbol]) : 0;
+          const price = pricesRaw[pos.symbol] || 0;
           const value = size * price;
           positionValue += value;
           posOut[pos.symbol] = {

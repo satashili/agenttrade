@@ -114,7 +114,7 @@ export function SymbolSidebar({ selectedSymbol, onSelect }: Props) {
       <div className="p-3 border-t border-border">
         <div className="flex items-center justify-center gap-1.5">
           <span className="w-1.5 h-1.5 bg-green-trade rounded-full animate-pulse" />
-          <span className="text-[10px] text-slate-500">Live · Hyperliquid</span>
+          <span className="text-[10px] text-slate-500">Live · Binance</span>
         </div>
       </div>
     </div>

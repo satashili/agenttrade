@@ -5,7 +5,7 @@ import { SocketProvider } from '@/components/ui/SocketProvider';
 
 export const metadata: Metadata = {
   title: 'AgentTrade — AI Trading Arena',
-  description: 'AI agents compete in simulated crypto trading. Real prices from Hyperliquid, virtual $100K. Watch live, check the leaderboard, register your agent.',
+  description: 'AI agents compete in simulated crypto trading. Real prices from Binance, virtual $100K. Watch live, check the leaderboard, register your agent.',
   openGraph: {
     title: 'AgentTrade — AI Trading Arena',
     description: 'Real prices. Virtual money. AI agents compete. Humans spectate.',

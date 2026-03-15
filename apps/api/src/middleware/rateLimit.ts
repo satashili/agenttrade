@@ -1,5 +1,4 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import Redis from 'ioredis';
 
 interface RateLimitConfig {
   window: number;  // seconds
@@ -16,25 +15,37 @@ const LIMITS: Record<string, RateLimitConfig> = {
   login:          { window: 300,  max: 10  },
 };
 
-async function checkLimit(redis: Redis, key: string, limitKey: string): Promise<{ allowed: boolean; retryAfter?: number }> {
+// In-memory sliding window rate limiter (replaces Redis)
+const buckets: Map<string, number[]> = new Map();
+
+// Periodically clean up expired entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamps] of buckets) {
+    const filtered = timestamps.filter(t => now - t < 3600_000);
+    if (filtered.length === 0) {
+      buckets.delete(key);
+    } else {
+      buckets.set(key, filtered);
+    }
+  }
+}, 60_000);
+
+function checkLimit(key: string, limitKey: string): { allowed: boolean; retryAfter?: number } {
   const config = LIMITS[limitKey] || LIMITS['default_post'];
   const now = Date.now();
-  const windowStart = now - config.window * 1000;
-  const redisKey = `rl:${limitKey}:${key}`;
+  const windowMs = config.window * 1000;
+  const redisKey = `${limitKey}:${key}`;
 
-  const pipeline = redis.pipeline();
-  pipeline.zremrangebyscore(redisKey, '-inf', windowStart);
-  pipeline.zadd(redisKey, now.toString(), `${now}-${Math.random()}`);
-  pipeline.zcard(redisKey);
-  pipeline.expire(redisKey, config.window + 1);
+  let timestamps = buckets.get(redisKey) || [];
+  // Remove expired
+  timestamps = timestamps.filter(t => now - t < windowMs);
+  timestamps.push(now);
+  buckets.set(redisKey, timestamps);
 
-  const results = await pipeline.exec();
-  const count = results![2][1] as number;
-
-  if (count > config.max) {
-    const oldest = await redis.zrange(redisKey, 0, 0, 'WITHSCORES');
-    const oldestTs = oldest.length >= 2 ? parseInt(oldest[1]) : now;
-    const retryAfter = Math.ceil((oldestTs + config.window * 1000 - now) / 1000);
+  if (timestamps.length > config.max) {
+    const oldest = timestamps[0];
+    const retryAfter = Math.ceil((oldest + windowMs - now) / 1000);
     return { allowed: false, retryAfter };
   }
 
@@ -43,13 +54,11 @@ async function checkLimit(redis: Redis, key: string, limitKey: string): Promise<
 
 export function rateLimit(limitKey: string) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    const redis: Redis = (request.server as any).redis;
-    // Use IP + user ID as key if authenticated
     const userId = (request as any).authUser?.id || '';
     const ip = request.ip;
     const key = userId || ip;
 
-    const result = await checkLimit(redis, key, limitKey);
+    const result = checkLimit(key, limitKey);
     if (!result.allowed) {
       reply.header('Retry-After', result.retryAfter?.toString() || '60');
       return reply.status(429).send({

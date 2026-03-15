@@ -1,6 +1,7 @@
 'use client';
 import { useMemo } from 'react';
 import { useMarketStore } from '@/lib/store';
+import { useBinanceDepth } from '@/hooks/useBinanceWS';
 
 type Sym = 'BTC' | 'ETH' | 'SOL';
 
@@ -17,30 +18,29 @@ function fmtPrice(p: number, sym: Sym) {
 }
 
 export function OrderBook({ symbol }: Props) {
-  const { prices, orderBooks } = useMarketStore();
+  const { prices } = useMarketStore();
+  const { orderBook } = useBinanceDepth(symbol);
   const price = prices[symbol] ?? 0;
-  const book = orderBooks[symbol];
 
   const sd = SIZE_DECIMALS[symbol];
 
-  // Build cumulative levels from real data
   const asks = useMemo(() => {
-    if (!book?.asks?.length) return [];
-    let cum = 0;
-    return book.asks.slice(0, 12).map((lvl) => {
-      cum += lvl.size;
-      return { price: lvl.price, size: lvl.size, cum };
-    });
-  }, [book?.asks]);
+    if (!orderBook.asks.length) return [];
+    return orderBook.asks.slice(0, 12).map((lvl) => ({
+      price: lvl.price,
+      size: lvl.quantity,
+      cum: lvl.total,
+    }));
+  }, [orderBook.asks]);
 
   const bids = useMemo(() => {
-    if (!book?.bids?.length) return [];
-    let cum = 0;
-    return book.bids.slice(0, 12).map((lvl) => {
-      cum += lvl.size;
-      return { price: lvl.price, size: lvl.size, cum };
-    });
-  }, [book?.bids]);
+    if (!orderBook.bids.length) return [];
+    return orderBook.bids.slice(0, 12).map((lvl) => ({
+      price: lvl.price,
+      size: lvl.quantity,
+      cum: lvl.total,
+    }));
+  }, [orderBook.bids]);
 
   const maxCum = Math.max(
     asks[asks.length - 1]?.cum ?? 1,
@@ -60,7 +60,7 @@ export function OrderBook({ symbol }: Props) {
       <div className="px-3 py-2 border-b border-border flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-white">Order Book</span>
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="Live from Hyperliquid" />
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="Live from Binance" />
         </div>
         <div className="flex items-center gap-2 text-[10px] text-slate-500">
           {spread > 0 && (
@@ -80,7 +80,7 @@ export function OrderBook({ symbol }: Props) {
 
       {!hasData ? (
         <div className="flex-1 flex items-center justify-center">
-          <span className="text-[11px] text-slate-600">Connecting to Hyperliquid…</span>
+          <span className="text-[11px] text-slate-600">Connecting to Binance...</span>
         </div>
       ) : (
         <div className="flex flex-col flex-1 overflow-hidden text-[11px]">

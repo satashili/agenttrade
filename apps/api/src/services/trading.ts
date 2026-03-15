@@ -106,7 +106,7 @@ export async function executeMarketOrder(
     io.to(`user:${userId}`).emit('orderFilled', result.order as any);
 
     // Build portfolio summary
-    const prices = { BTC: 0, ETH: 0, SOL: 0 };  // placeholder; actual prices from redis
+    const prices = { BTC: 0, ETH: 0, SOL: 0 };  // placeholder; portfolio uses marketData directly
     const cashBalance = parseFloat(result.account!.cashBalance.toString());
 
     return {

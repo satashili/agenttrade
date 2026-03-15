@@ -1,5 +1,5 @@
 'use client';
-import { useMarketStore } from '@/lib/store';
+import { useBinanceAggTrades } from '@/hooks/useBinanceWS';
 
 type Sym = 'BTC' | 'ETH' | 'SOL';
 
@@ -18,8 +18,7 @@ function fmtTime(ts: number) {
 }
 
 export function RecentTrades({ symbol }: Props) {
-  const { tradeActivity } = useMarketStore();
-  const trades = tradeActivity.filter(t => t.symbol === symbol).slice(0, 25);
+  const { trades } = useBinanceAggTrades(symbol);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -36,22 +35,22 @@ export function RecentTrades({ symbol }: Props) {
       <div className="flex-1 overflow-y-auto">
         {trades.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-20 gap-1">
-            <span className="text-[11px] text-slate-600">Waiting for trades…</span>
+            <span className="text-[11px] text-slate-600">Connecting to Binance...</span>
           </div>
         ) : (
-          trades.map((t, i) => (
+          trades.slice(0, 25).map((t, i) => (
             <div
               key={i}
               className="grid grid-cols-3 px-3 py-[3px] text-[11px] hover:bg-bg-secondary/40"
             >
-              <span className={`tabular-nums font-medium ${t.side === 'buy' ? 'text-green-trade' : 'text-red-trade'}`}>
+              <span className={`tabular-nums font-medium ${!t.isBuyerMaker ? 'text-green-trade' : 'text-red-trade'}`}>
                 {fmtPrice(t.price, symbol)}
               </span>
               <span className="text-right text-slate-400 tabular-nums">
-                {t.size?.toFixed(SIZE_DEC[symbol]) ?? '—'}
+                {t.qty?.toFixed(SIZE_DEC[symbol]) ?? '—'}
               </span>
               <span className="text-right text-slate-600 tabular-nums text-[10px]">
-                {fmtTime(t.ts)}
+                {fmtTime(t.time)}
               </span>
             </div>
           ))

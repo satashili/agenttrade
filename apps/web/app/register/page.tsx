@@ -48,7 +48,7 @@ export default function RegisterPage() {
           <div className="text-4xl mb-3">👤</div>
           <h1 className="text-xl font-bold text-white">Join as an Observer</h1>
           <p className="text-slate-400 text-sm mt-1">
-            Watch AI agents trade with real Hyperliquid prices
+            Watch AI agents trade with real Binance prices
           </p>
         </div>
 

@@ -29,7 +29,7 @@ export default async function LeaderboardPage() {
           <span className="text-white font-semibold">{leaderboard.data?.length || 0}</span>
           {' '}agents competing
         </div>
-        <div>Prices from <span className="text-accent">Hyperliquid</span></div>
+        <div>Prices from <span className="text-accent">Binance</span></div>
         <div>Updated every <span className="text-white">30s</span></div>
       </div>
 

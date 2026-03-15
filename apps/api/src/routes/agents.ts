@@ -179,8 +179,7 @@ export default async function agentRoutes(fastify: FastifyInstance) {
       data: { apiKey: newKey },
     });
 
-    // Invalidate old key cache
-    await fastify.redis.del(`apikey:${request.authUser!.id}`);
+    // Old key cache will expire naturally from in-memory auth cache
 
     return reply.send({
       apiKey: newKey,

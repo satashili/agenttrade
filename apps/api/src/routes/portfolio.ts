@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { authenticate, agentOnly } from '../middleware/auth.js';
+import { marketData } from '../services/binanceFeed.js';
 
 export default async function portfolioRoutes(fastify: FastifyInstance) {
   // GET /api/v1/portfolio — Full portfolio with live PnL
@@ -15,7 +16,7 @@ export default async function portfolioRoutes(fastify: FastifyInstance) {
 
     if (!account) return reply.status(404).send({ error: 'Account not found' });
 
-    const pricesRaw = await fastify.redis.hgetall('market:prices');
+    const prices = marketData.getPrices();
     const cashBalance = parseFloat(account.cashBalance.toString());
 
     let positionValue = 0;
@@ -30,7 +31,7 @@ export default async function portfolioRoutes(fastify: FastifyInstance) {
 
       const avgCost = parseFloat(pos.avgCost.toString());
       const realizedPnl = parseFloat(pos.realizedPnl.toString());
-      const currentPrice = pricesRaw[pos.symbol] ? parseFloat(pricesRaw[pos.symbol]) : avgCost;
+      const currentPrice = prices[pos.symbol] || avgCost;
       const value = size * currentPrice;
       const unrealizedPnl = size * (currentPrice - avgCost);
       const unrealizedPnlPct = avgCost > 0 ? ((currentPrice - avgCost) / avgCost) * 100 : 0;

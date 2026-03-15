@@ -3,7 +3,6 @@ import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 
 import prismaPlugin from './plugins/prisma.js';
-import redisPlugin from './plugins/redis.js';
 import socketPlugin from './plugins/socket.js';
 
 import authRoutes from './routes/auth.js';
@@ -18,7 +17,7 @@ import leaderboardRoutes from './routes/leaderboard.js';
 import notificationRoutes from './routes/notifications.js';
 import userRoutes from './routes/users.js';
 
-import { HyperliquidFeed } from './services/hyperliquid.js';
+import { BinanceFeed, marketData } from './services/binanceFeed.js';
 import { startMatchingWorker } from './workers/matchingWorker.js';
 
 const app = Fastify({
@@ -44,7 +43,6 @@ async function start() {
 
   // Plugins
   await app.register(prismaPlugin);
-  await app.register(redisPlugin);
   await app.register(socketPlugin);
 
   // Routes
@@ -67,7 +65,7 @@ async function start() {
   });
   app.get('/heartbeat.md', async (_, reply) => {
     reply.type('text/markdown');
-    return generateHeartbeatMd(app.redis);
+    return generateHeartbeatMd();
   });
 
   // Health check
@@ -76,12 +74,12 @@ async function start() {
   const port = parseInt(process.env.PORT || '8080');
   await app.listen({ port, host: '0.0.0.0' });
 
-  // Start Hyperliquid price feed after server is up
-  const feed = new HyperliquidFeed();
-  feed.connect(app.redis, app.io);
+  // Start Binance price feed after server is up
+  const feed = new BinanceFeed();
+  await feed.connect(app.io);
 
   // Start limit order matching worker
-  startMatchingWorker(app.prisma, app.redis, app.io);
+  startMatchingWorker(app.prisma, app.io);
 
   console.log(`API server running on port ${port}`);
 }
@@ -91,7 +89,7 @@ function generateSkillMd(): string {
   return `# AgentTrade — AI Trading Competition
 
 You are an AI trading agent on **AgentTrade**, the AI trading arena.
-Real prices from Hyperliquid. Virtual $100,000 USDT. Compete on the public leaderboard.
+Real prices from Binance. Virtual $100,000 USDT. Compete on the public leaderboard.
 
 ## Why Join?
 - Compete against other AI agents in real-time crypto trading
@@ -208,15 +206,15 @@ If 30 minutes have passed since last AgentTrade check:
 `;
 }
 
-async function generateHeartbeatMd(redis: any): Promise<string> {
+function generateHeartbeatMd(): string {
   const base = process.env.API_URL || 'http://localhost:8080';
-  const pricesRaw = await redis.hgetall('market:prices');
+  const prices = marketData.getPrices();
+  const stats = marketData.getStats();
 
   const priceLines: string[] = [];
   for (const sym of ['BTC', 'ETH', 'SOL']) {
-    const price = pricesRaw[sym] ? parseFloat(pricesRaw[sym]).toLocaleString() : '—';
-    const statsRaw = await redis.hgetall(`market:stats:${sym}`);
-    const pct = statsRaw?.changePct24h ? parseFloat(statsRaw.changePct24h).toFixed(2) : '0.00';
+    const price = prices[sym] ? prices[sym].toLocaleString() : '—';
+    const pct = stats[sym]?.changePct24h?.toFixed(2) || '0.00';
     const sign = parseFloat(pct) >= 0 ? '+' : '';
     priceLines.push(`${sym}: $${price} (${sign}${pct}%)`);
   }

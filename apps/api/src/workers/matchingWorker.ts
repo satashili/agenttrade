@@ -1,24 +1,19 @@
 import { PrismaClient, Prisma } from '@prisma/client';
-import Redis from 'ioredis';
 import { Server as SocketServer } from 'socket.io';
+import { marketData } from '../services/binanceFeed.js';
 
 let lastPrices: Record<string, number> = {};
 let isRunning = false;
 
-export function startMatchingWorker(prisma: PrismaClient, redis: Redis, io: SocketServer) {
-  // Poll prices from Redis every 500ms and check limit orders
+export function startMatchingWorker(prisma: PrismaClient, io: SocketServer) {
+  // Poll prices from in-memory store every 500ms and check limit orders
   setInterval(async () => {
     if (isRunning) return;
     isRunning = true;
 
     try {
-      const pricesRaw = await redis.hgetall('market:prices');
-      if (!pricesRaw || Object.keys(pricesRaw).length === 0) return;
-
-      const prices: Record<string, number> = {};
-      for (const [k, v] of Object.entries(pricesRaw)) {
-        prices[k] = parseFloat(v as string);
-      }
+      const prices = marketData.getPrices();
+      if (Object.keys(prices).length === 0) return;
 
       // Only process if prices changed
       let hasChange = false;
@@ -29,8 +24,7 @@ export function startMatchingWorker(prisma: PrismaClient, redis: Redis, io: Sock
       if (!hasChange) return;
       lastPrices = { ...prices };
 
-      await matchLimitOrders(prisma, redis, io, prices);
-      await updateLeaderboard(prisma, redis, prices);
+      await matchLimitOrders(prisma, io, prices);
 
     } catch (err: any) {
       console.error('[MatchingWorker] Error:', err.message);
@@ -44,7 +38,6 @@ export function startMatchingWorker(prisma: PrismaClient, redis: Redis, io: Sock
 
 async function matchLimitOrders(
   prisma: PrismaClient,
-  redis: Redis,
   io: SocketServer,
   prices: Record<string, number>
 ) {
@@ -84,7 +77,6 @@ async function fillLimitOrder(prisma: PrismaClient, io: SocketServer, order: any
         const totalCost = fillValue + fee;
         const balance = parseFloat(account.cashBalance.toString());
         if (balance < totalCost) {
-          // Cancel the order if can't afford
           await tx.order.update({ where: { id: order.id }, data: { status: 'cancelled' } });
           return;
         }
@@ -194,44 +186,4 @@ async function upsertPosition(
       },
     });
   }
-}
-
-async function updateLeaderboard(
-  prisma: PrismaClient,
-  redis: Redis,
-  prices: Record<string, number>
-) {
-  // Recalculate top agents' portfolio values and update Redis sorted set
-  const agents = await prisma.user.findMany({
-    where: { type: 'agent', claimStatus: 'claimed' },
-    select: {
-      id: true,
-      account: { select: { cashBalance: true, totalDeposited: true } },
-      positions: { select: { symbol: true, size: true } },
-    },
-    take: 200,
-  });
-
-  const pipeline = redis.pipeline();
-
-  for (const agent of agents) {
-    if (!agent.account) continue;
-
-    const cashBalance = parseFloat(agent.account.cashBalance.toString());
-    const totalDeposited = parseFloat(agent.account.totalDeposited.toString());
-
-    let positionValue = 0;
-    for (const pos of agent.positions) {
-      const size = parseFloat(pos.size.toString());
-      const price = prices[pos.symbol] || 0;
-      positionValue += size * price;
-    }
-
-    const totalValue = cashBalance + positionValue;
-    const pnlPct = ((totalValue - totalDeposited) / totalDeposited) * 100;
-
-    pipeline.zadd('leaderboard:total_pnl_pct', pnlPct.toString(), agent.id);
-  }
-
-  await pipeline.exec();
 }

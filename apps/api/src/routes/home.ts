@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { authenticate, agentOnly } from '../middleware/auth.js';
+import { marketData } from '../services/binanceFeed.js';
 
 export default async function homeRoutes(fastify: FastifyInstance) {
   fastify.get('/home', {
@@ -26,7 +27,8 @@ export default async function homeRoutes(fastify: FastifyInstance) {
       }),
     ]);
 
-    const pricesRaw = await fastify.redis.hgetall('market:prices');
+    const prices = marketData.getPrices();
+    const stats = marketData.getStats();
     const cashBalance = parseFloat(account?.cashBalance.toString() || '100000');
 
     // Compute portfolio totals
@@ -34,7 +36,7 @@ export default async function homeRoutes(fastify: FastifyInstance) {
     for (const pos of positions) {
       const size = parseFloat(pos.size.toString());
       if (size === 0) continue;
-      const price = pricesRaw[pos.symbol] ? parseFloat(pricesRaw[pos.symbol]) : parseFloat(pos.avgCost.toString());
+      const price = prices[pos.symbol] || parseFloat(pos.avgCost.toString());
       positionValue += size * price;
     }
 
@@ -43,18 +45,39 @@ export default async function homeRoutes(fastify: FastifyInstance) {
     const totalPnl = totalValue - totalDeposited;
     const totalPnlPct = ((totalValue - totalDeposited) / totalDeposited) * 100;
 
-    // Leaderboard rank
-    const rankData = await fastify.redis.zrevrank('leaderboard:total_pnl_pct', userId);
-    const rank = rankData !== null ? rankData + 1 : null;
+    // Leaderboard rank via Prisma
+    let rank: number | null = null;
+    try {
+      const agents = await fastify.prisma.user.findMany({
+        where: { type: 'agent', claimStatus: 'claimed' },
+        select: {
+          id: true,
+          account: { select: { cashBalance: true, totalDeposited: true } },
+          positions: { select: { symbol: true, size: true } },
+        },
+      });
+
+      const ranked = agents.map(agent => {
+        const cb = parseFloat(agent.account?.cashBalance.toString() || '100000');
+        const td = parseFloat(agent.account?.totalDeposited.toString() || '100000');
+        let pv = 0;
+        for (const p of agent.positions) {
+          pv += parseFloat(p.size.toString()) * (prices[p.symbol] || 0);
+        }
+        return { id: agent.id, pnlPct: ((cb + pv - td) / td) * 100 };
+      }).sort((a, b) => b.pnlPct - a.pnlPct);
+
+      const idx = ranked.findIndex(a => a.id === userId);
+      if (idx >= 0) rank = idx + 1;
+    } catch { /* ignore */ }
 
     // Market info with 24h change
     const market: Record<string, any> = {};
-    for (const [symbol, priceStr] of Object.entries(pricesRaw)) {
-      const price = parseFloat(priceStr as string);
-      const statsRaw = await fastify.redis.hget(`market:stats:${symbol}`, 'changePct24h');
+    for (const [symbol, price] of Object.entries(prices)) {
+      const s = stats[symbol];
       market[symbol] = {
         price,
-        change24h: statsRaw ? parseFloat(statsRaw) : 0,
+        change24h: s?.changePct24h ?? 0,
       };
     }
 

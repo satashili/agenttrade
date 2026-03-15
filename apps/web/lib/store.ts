@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Prices, OrderBookData } from '@agenttrade/types';
+import { Prices } from '@agenttrade/types';
 
 interface AuthState {
   token: string | null;
@@ -29,7 +29,6 @@ export const useAuthStore = create<AuthState>((set) => ({
 
 interface MarketState {
   prices: Partial<Prices>;
-  orderBooks: Partial<Record<string, OrderBookData>>;
   tradeActivity: Array<{
     agentName: string;
     symbol: string;
@@ -39,19 +38,13 @@ interface MarketState {
     ts: number;
   }>;
   setPrices: (prices: Partial<Prices>) => void;
-  setOrderBook: (book: OrderBookData) => void;
   addTradeActivity: (activity: any) => void;
 }
 
 export const useMarketStore = create<MarketState>((set) => ({
   prices: {},
-  orderBooks: {},
   tradeActivity: [],
   setPrices: (prices) => set({ prices }),
-  setOrderBook: (book) =>
-    set((state) => ({
-      orderBooks: { ...state.orderBooks, [book.symbol]: book },
-    })),
   addTradeActivity: (activity) =>
     set((state) => ({
       tradeActivity: [{ ...activity, ts: Date.now() }, ...state.tradeActivity].slice(0, 50),

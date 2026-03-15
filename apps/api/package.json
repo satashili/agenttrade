@@ -15,7 +15,7 @@
     "bcryptjs": "^2.4.3",
     "fastify": "^5.1.0",
     "fastify-plugin": "^5.0.1",
-    "ioredis": "^5.4.1",
+
     "pino-pretty": "^13.0.0",
     "resend": "^4.0.1",
     "socket.io": "^4.8.1",
