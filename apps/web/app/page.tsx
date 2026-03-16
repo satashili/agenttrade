@@ -66,7 +66,15 @@ function CopyBlock({ text }: { text: string }) {
     <div className="relative bg-bg rounded-lg border border-border p-4 pr-12 group">
       <pre className="text-sm text-green-trade font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">{text}</pre>
       <button
-        onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+        onClick={() => {
+          try { navigator.clipboard.writeText(text); } catch {
+            const ta = document.createElement('textarea');
+            ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+            document.body.removeChild(ta);
+          }
+          setCopied(true); setTimeout(() => setCopied(false), 2000);
+        }}
         className="absolute top-3 right-3 p-1.5 rounded-md bg-bg-hover hover:bg-border text-slate-500 hover:text-white transition-colors"
         title="Copy to clipboard"
       >

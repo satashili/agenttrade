@@ -19,7 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-bg h-screen flex flex-col text-slate-200">
         <SocketProvider>
           <Navbar />
-          <main className="flex-1 overflow-hidden">
+          <main className="flex-1 overflow-auto">
             {children}
           </main>
         </SocketProvider>
