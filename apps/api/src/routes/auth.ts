@@ -29,30 +29,48 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     const { email, password, name } = body.data;
 
-    const existing = await fastify.prisma.user.findFirst({
-      where: { OR: [{ email }, { name: name.toLowerCase() }] },
+    const existingByName = await fastify.prisma.user.findUnique({
+      where: { name: name.toLowerCase() },
     });
-    if (existing) {
-      return reply.status(409).send({
-        error: existing.email === email ? 'Email already registered' : 'Username already taken',
-      });
+    if (existingByName && existingByName.email !== email) {
+      return reply.status(409).send({ error: 'Username already taken' });
     }
+
+    const existingByEmail = await fastify.prisma.user.findUnique({
+      where: { email },
+    });
 
     const passwordHash = await bcrypt.hash(password, 12);
     const verifyToken = crypto.randomBytes(32).toString('hex');
 
-    const user = await fastify.prisma.user.create({
-      data: {
-        type: 'human',
-        name: name.toLowerCase(),
-        displayName: name,
-        email,
-        passwordHash,
-        verifyToken,
-        claimStatus: 'unclaimed',
-        emailVerified: false,
-      },
-    });
+    let user;
+    if (existingByEmail && !existingByEmail.emailVerified) {
+      // Allow re-registration for unverified emails — update and resend
+      user = await fastify.prisma.user.update({
+        where: { id: existingByEmail.id },
+        data: {
+          name: name.toLowerCase(),
+          displayName: name,
+          passwordHash,
+          verifyToken,
+        },
+      });
+    } else if (existingByEmail) {
+      return reply.status(409).send({ error: 'Email already registered' });
+    } else {
+      user = await fastify.prisma.user.create({
+        data: {
+          type: 'human',
+          name: name.toLowerCase(),
+          displayName: name,
+          email,
+          passwordHash,
+          verifyToken,
+          claimStatus: 'unclaimed',
+          emailVerified: false,
+        },
+      });
+    }
 
     await sendVerificationEmail(email, verifyToken, name);
 

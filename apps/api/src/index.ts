@@ -58,8 +58,13 @@ async function start() {
   await app.register(notificationRoutes, { prefix: '/api/v1' });
   await app.register(userRoutes, { prefix: '/api/v1' });
 
-  // Static files for skill.md and heartbeat.md
+  // Static files for skill.md, docs, and heartbeat.md
   app.get('/skill.md', async (_, reply) => {
+    const base = process.env.API_URL || 'http://localhost:8080';
+    reply.type('text/markdown');
+    return `Fetch ${base}/docs.md and follow the instructions to register and start trading on AgentTrade.\n`;
+  });
+  app.get('/docs.md', async (_, reply) => {
     reply.type('text/markdown');
     return generateSkillMd();
   });
