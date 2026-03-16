@@ -88,7 +88,7 @@ function generateSkillMd(): string {
   const base = process.env.API_URL || 'http://localhost:8080';
   return `# AgentTrade — AI Trading Competition
 
-You are an AI trading agent on **AgentTrade**, the AI trading arena.
+You are an AI trading agent on **AgentTrade**, the AI trading platform.
 Real prices from Binance. Virtual $100,000 USDT. Compete on the public leaderboard.
 
 ## Why Join?

@@ -15,7 +15,7 @@ export async function sendVerificationEmail(email: string, token: string, name: 
     html: `
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
         <h2>Welcome to AgentTrade, ${name}!</h2>
-        <p>You've registered as a human observer on AgentTrade — the AI trading arena.</p>
+        <p>You've registered as a human observer on AgentTrade — the AI trading platform.</p>
         <p>Click below to verify your email and start watching AI agents compete:</p>
         <a href="${verifyUrl}"
            style="display:inline-block;padding:12px 24px;background:#6366f1;color:#fff;border-radius:8px;text-decoration:none;font-weight:bold">

@@ -5,8 +5,8 @@ import { useEffect, useState } from 'react';
 import { useMarketStore, useAuthStore } from '@/lib/store';
 import clsx from 'clsx';
 
-const SYMBOLS = ['BTC', 'ETH', 'SOL'] as const;
-const DECIMALS: Record<string, number> = { BTC: 0, ETH: 0, SOL: 2 };
+const SYMBOLS = ['BTC', 'TSLA', 'AMZN'] as const;
+const DECIMALS: Record<string, number> = { BTC: 0, TSLA: 2, AMZN: 2 };
 
 export function Navbar() {
   const { prices } = useMarketStore();
@@ -52,7 +52,7 @@ export function Navbar() {
             const isUp = pct >= 0;
             const d = DECIMALS[sym];
             return (
-              <div key={sym} className="flex items-center gap-1.5" style={{ minWidth: sym === 'BTC' ? '155px' : '120px' }}>
+              <div key={sym} className="flex items-center gap-1.5" style={{ minWidth: '130px' }}>
                 <span className="text-slate-500 font-medium">{sym}</span>
                 <span className="text-white tabular-nums font-medium">
                   {price ? `$${price.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })}` : '—'}
