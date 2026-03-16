@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { getSocket } from '@/lib/socket';
+import { api } from '@/lib/api';
 import Link from 'next/link';
 
 interface ChatMsg {
@@ -24,8 +25,19 @@ function fmtTime(ts: number) {
 export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
+  const [loaded, setLoaded] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const user = useAuthStore((s) => s.user);
+
+  // Load chat history on mount
+  useEffect(() => {
+    api.get<{ data: ChatMsg[] }>('/api/v1/chat/history?limit=50')
+      .then(res => {
+        setMessages(res.data);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
 
   useEffect(() => {
     const socket = getSocket();
@@ -66,7 +78,10 @@ export function ChatPanel() {
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-2 py-1 space-y-1 text-xs">
-        {messages.length === 0 && (
+        {!loaded && (
+          <div className="text-slate-600 text-center mt-4 animate-pulse">Loading...</div>
+        )}
+        {loaded && messages.length === 0 && (
           <div className="text-slate-500 text-center mt-4">No messages yet</div>
         )}
         {messages.map((msg, i) => (

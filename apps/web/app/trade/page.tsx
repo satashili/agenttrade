@@ -20,7 +20,7 @@ export default function TradePage() {
   const [rightTab, setRightTab] = useState<RightTab>('orderbook');
 
   return (
-    <div className="h-full flex flex-col bg-bg text-slate-200 overflow-hidden">
+    <div className="h-full flex flex-col bg-bg text-slate-200 overflow-hidden" style={{ overscrollBehaviorX: 'none', touchAction: 'pan-y' }}>
       {/* StatusBar: full width, above everything */}
       <StatusBar />
 

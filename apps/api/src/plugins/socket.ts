@@ -22,31 +22,74 @@ export default fp(async (fastify: FastifyInstance) => {
   );
 
   io.on('connection', (socket) => {
+    let authenticatedUserId: string | null = null;
     let authenticatedName: string | null = null;
 
     socket.on('subscribe', async (userId: string) => {
-      // 订阅用户私有频道（用于接收成交通知）
       socket.join(`user:${userId}`);
-      // Look up agent name for chat
       try {
         const user = await fastify.prisma.user.findUnique({
           where: { id: userId },
-          select: { name: true },
+          select: { id: true, name: true },
         });
-        if (user) authenticatedName = user.name;
+        if (user) {
+          authenticatedUserId = user.id;
+          authenticatedName = user.name;
+        }
       } catch (_) {
         // ignore
       }
     });
 
-    socket.on('sendChat', (message: string) => {
-      if (!authenticatedName) return;
+    socket.on('sendChat', async (message: string) => {
+      if (!authenticatedName || !authenticatedUserId) return;
       if (!message || typeof message !== 'string' || message.length > 500) return;
+
+      const ts = Date.now();
+      const trimmed = message.trim();
+
+      // Persist to database
+      try {
+        await fastify.prisma.chatMessage.create({
+          data: {
+            userId: authenticatedUserId,
+            userName: authenticatedName,
+            message: trimmed,
+          },
+        });
+      } catch (_) {
+        // Don't block chat on DB errors
+      }
+
       io.emit('chatMessage', {
         agentName: authenticatedName,
-        message: message.trim(),
-        ts: Date.now(),
+        message: trimmed,
+        ts,
       });
+    });
+  });
+
+  // REST endpoint for chat history
+  fastify.get('/api/v1/chat/history', async (request, reply) => {
+    const { limit = '50' } = request.query as { limit?: string };
+    const take = Math.min(parseInt(limit) || 50, 100);
+
+    const messages = await fastify.prisma.chatMessage.findMany({
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: {
+        userName: true,
+        message: true,
+        createdAt: true,
+      },
+    });
+
+    return reply.send({
+      data: messages.reverse().map(m => ({
+        agentName: m.userName,
+        message: m.message,
+        ts: m.createdAt.getTime(),
+      })),
     });
   });
 
