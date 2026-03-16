@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { authenticate, agentOnly } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { executeMarketOrder } from '../services/trading.js';
 import { marketData } from '../services/binanceFeed.js';
@@ -11,11 +11,10 @@ const placeOrderSchema = z.object({
   type: z.enum(['market', 'limit', 'stop']),
   size: z.number().positive().max(1000000),
   price: z.number().positive().optional(),
-  onBehalfOf: z.string().uuid().optional(), // human trading on behalf of owned agent
 });
 
 export default async function orderRoutes(fastify: FastifyInstance) {
-  // POST /api/v1/orders — Place an order (agent or human with owned agent)
+  // POST /api/v1/orders — Place an order (any authenticated user)
   fastify.post('/orders', {
     preHandler: [authenticate, rateLimit('order')],
   }, async (request, reply) => {
@@ -24,27 +23,9 @@ export default async function orderRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'Invalid order', details: body.error.flatten() });
     }
 
-    const { symbol, side, type, size, price, onBehalfOf } = body.data;
-    let userId = request.authUser!.id;
-    let agentName = request.authUser!.name;
-
-    // If human is trading on behalf of their agent
-    if (request.authUser!.type === 'human') {
-      if (!onBehalfOf) {
-        return reply.status(400).send({ error: 'Human users must specify onBehalfOf with an agent ID' });
-      }
-      const agent = await fastify.prisma.user.findFirst({
-        where: { id: onBehalfOf, type: 'agent', ownerId: request.authUser!.id },
-        select: { id: true, name: true },
-      });
-      if (!agent) {
-        return reply.status(403).send({ error: 'You do not own this agent' });
-      }
-      userId = agent.id;
-      agentName = agent.name;
-    } else if (request.authUser!.type !== 'agent') {
-      return reply.status(403).send({ error: 'Only agents or agent owners can place orders' });
-    }
+    const { symbol, side, type, size, price } = body.data;
+    const userId = request.authUser!.id;
+    const agentName = request.authUser!.name;
 
     // Validate limit/stop orders have a price
     if ((type === 'limit' || type === 'stop') && !price) {
@@ -112,26 +93,14 @@ export default async function orderRoutes(fastify: FastifyInstance) {
     return reply.status(201).send({ order });
   });
 
-  // Helper: resolve agent IDs accessible by the current user
-  async function getAccessibleAgentIds(request: any): Promise<string[]> {
-    if (request.authUser!.type === 'agent') return [request.authUser!.id];
-    // Human: return owned agent IDs
-    const agents = await fastify.prisma.user.findMany({
-      where: { ownerId: request.authUser!.id, type: 'agent' },
-      select: { id: true },
-    });
-    return agents.map(a => a.id);
-  }
-
   // GET /api/v1/orders — Order history
   fastify.get('/orders', {
     preHandler: [authenticate],
   }, async (request, reply) => {
     const { status, limit = '20', cursor } = request.query as Record<string, string>;
-    const agentIds = await getAccessibleAgentIds(request);
-    if (agentIds.length === 0) return reply.send({ data: [], hasMore: false, nextCursor: null });
+    const userId = request.authUser!.id;
 
-    const where: any = { userId: { in: agentIds } };
+    const where: any = { userId };
     if (status) where.status = status;
     if (cursor) where.createdAt = { lt: new Date(cursor) };
 
@@ -156,9 +125,8 @@ export default async function orderRoutes(fastify: FastifyInstance) {
     preHandler: [authenticate],
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const agentIds = await getAccessibleAgentIds(request);
     const order = await fastify.prisma.order.findFirst({
-      where: { id, userId: { in: agentIds } },
+      where: { id, userId: request.authUser!.id },
     });
     if (!order) return reply.status(404).send({ error: 'Order not found' });
     return reply.send({ order });
@@ -169,10 +137,9 @@ export default async function orderRoutes(fastify: FastifyInstance) {
     preHandler: [authenticate],
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const agentIds = await getAccessibleAgentIds(request);
 
     const order = await fastify.prisma.order.findFirst({
-      where: { id, userId: { in: agentIds } },
+      where: { id, userId: request.authUser!.id },
     });
 
     if (!order) return reply.status(404).send({ error: 'Order not found' });

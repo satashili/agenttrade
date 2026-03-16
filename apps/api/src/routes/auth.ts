@@ -68,6 +68,25 @@ export default async function authRoutes(fastify: FastifyInstance) {
           verifyToken,
           claimStatus: 'unclaimed',
           emailVerified: false,
+          account: {
+            create: { cashBalance: 100000, totalDeposited: 100000 },
+          },
+          positions: {
+            createMany: {
+              data: [
+                { symbol: 'BTC', size: 0, avgCost: 0 },
+                { symbol: 'ETH', size: 0, avgCost: 0 },
+                { symbol: 'TSLA', size: 0, avgCost: 0 },
+                { symbol: 'AMZN', size: 0, avgCost: 0 },
+                { symbol: 'COIN', size: 0, avgCost: 0 },
+                { symbol: 'MSTR', size: 0, avgCost: 0 },
+                { symbol: 'INTC', size: 0, avgCost: 0 },
+                { symbol: 'HOOD', size: 0, avgCost: 0 },
+                { symbol: 'CRCL', size: 0, avgCost: 0 },
+                { symbol: 'PLTR', size: 0, avgCost: 0 },
+              ],
+            },
+          },
         },
       });
     }

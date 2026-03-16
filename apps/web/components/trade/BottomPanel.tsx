@@ -76,9 +76,9 @@ export function BottomPanel({ symbol }: Props) {
   const { token, user } = useAuthStore();
   const { tradeActivity } = useMarketStore();
 
-  const isAgent = user?.type === 'agent';
+  const isLoggedIn = !!token;
 
-  // Load platform-wide data (for everyone) + personal data (for agents)
+  // Load platform-wide data (for everyone) + personal data (for logged-in users)
   const refresh = useCallback(() => {
     setLoading(true);
     const promises: Promise<any>[] = [
@@ -88,7 +88,7 @@ export function BottomPanel({ symbol }: Props) {
         .catch(() => {}),
     ];
 
-    if (token && isAgent) {
+    if (isLoggedIn) {
       promises.push(
         api.get<{ data: Order[] }>('/api/v1/orders?limit=100')
           .then(o => setOrders(o.data ?? []))
@@ -99,19 +99,8 @@ export function BottomPanel({ symbol }: Props) {
       );
     }
 
-    if (!isAgent) {
-      // Load agent stats for positions overview
-      promises.push(
-        api.get<any>('/api/v1/market/agent-stats')
-          .then(r => {
-            // We'll use this for the platform overview
-          })
-          .catch(() => {}),
-      );
-    }
-
     Promise.all(promises).finally(() => setLoading(false));
-  }, [token, isAgent]);
+  }, [isLoggedIn]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -149,18 +138,18 @@ export function BottomPanel({ symbol }: Props) {
       })),
   ].sort((a, b) => b.ts - a.ts).slice(0, 50);
 
-  const TABS: { id: Tab; label: string; badge?: number }[] = isAgent
+  const TABS: { id: Tab; label: string; badge?: number }[] = isLoggedIn
     ? [
-        { id: 'activity', label: 'AI Activity', badge: allActivity.length || undefined },
+        { id: 'activity', label: 'Activity', badge: allActivity.length || undefined },
         { id: 'open', label: 'Open Orders', badge: openOrders.length || undefined },
         { id: 'history', label: 'Order History' },
         { id: 'positions', label: 'Positions', badge: portfolio?.positions.length || undefined },
         { id: 'assets', label: 'Assets' },
       ]
     : [
-        { id: 'activity', label: 'AI Activity', badge: allActivity.length || undefined },
+        { id: 'activity', label: 'Activity', badge: allActivity.length || undefined },
         { id: 'history', label: 'Recent Trades' },
-        { id: 'positions', label: 'Agent Positions' },
+        { id: 'positions', label: 'Leaderboard' },
       ];
 
   return (
@@ -232,7 +221,7 @@ export function BottomPanel({ symbol }: Props) {
             )}
 
             {/* Recent Trades (platform-wide for observers) / Order History (for agents) */}
-            {tab === 'history' && !isAgent && (
+            {tab === 'history' && !isLoggedIn && (
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-bg-card z-10">
                   <tr className="text-[10px] text-slate-500 border-b border-border/50">
@@ -263,7 +252,7 @@ export function BottomPanel({ symbol }: Props) {
               </table>
             )}
 
-            {tab === 'history' && isAgent && (
+            {tab === 'history' && isLoggedIn && (
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-bg-card z-10">
                   <tr className="text-[10px] text-slate-500 border-b border-border/50">
@@ -292,7 +281,7 @@ export function BottomPanel({ symbol }: Props) {
             )}
 
             {/* Positions: agent sees own, observer sees all agents */}
-            {tab === 'positions' && isAgent && (
+            {tab === 'positions' && isLoggedIn && (
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-bg-card z-10">
                   <tr className="text-[10px] text-slate-500 border-b border-border/50">
@@ -323,7 +312,7 @@ export function BottomPanel({ symbol }: Props) {
               </table>
             )}
 
-            {tab === 'positions' && !isAgent && (
+            {tab === 'positions' && !isLoggedIn && (
               <PlatformPositions />
             )}
 

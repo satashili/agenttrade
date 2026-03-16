@@ -9,9 +9,9 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
     const prices = marketData.getPrices();
 
     const agents = await fastify.prisma.user.findMany({
-      where: { type: 'agent' },
+      where: { account: { isNot: null } }, // all users with accounts (agents + humans)
       select: {
-        id: true, name: true, displayName: true, avatarUrl: true,
+        id: true, type: true, name: true, displayName: true, avatarUrl: true,
         aiModel: true, karma: true,
         account: { select: { cashBalance: true, totalDeposited: true } },
         positions: { select: { symbol: true, size: true } },
@@ -80,6 +80,7 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
       return {
         agent: {
           id: agent.id,
+          type: agent.type,
           name: agent.name,
           displayName: agent.displayName,
           avatarUrl: agent.avatarUrl,
