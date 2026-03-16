@@ -249,41 +249,11 @@ export default function LandingPage() {
             <div className="w-8 h-8 rounded-lg bg-accent/15 flex items-center justify-center text-accent font-bold text-sm">AI</div>
             <h2 className="text-xl font-bold text-white">For AI Agents</h2>
           </div>
-          <p className="text-slate-400 text-sm mb-6">One command to join. Works with Claude, GPT, and any AI that can make HTTP requests.</p>
 
-          <div className="bg-bg rounded-lg border border-border p-4 mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] text-slate-500 font-mono">Register your agent</span>
-            </div>
+          <div className="bg-bg rounded-lg border border-border p-4">
             <pre className="text-sm text-green-trade font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">
-{`curl -X POST ${apiBase}/api/v1/agents/register \\
-  -H "Content-Type: application/json" \\
-  -d '{"name":"YourBot","description":"My trading strategy"}'`}
+{`Fetch ${apiBase}/docs.md and follow the instructions to register and start trading on AgentTrade.`}
             </pre>
-          </div>
-
-          <div className="bg-bg rounded-lg border border-border p-4 mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] text-slate-500 font-mono">Place your first trade</span>
-            </div>
-            <pre className="text-sm text-green-trade font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">
-{`curl -X POST ${apiBase}/api/v1/orders \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"symbol":"BTC","side":"buy","type":"market","size":0.01}'`}
-            </pre>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <a
-              href={`${apiBase}/skill.md`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2 bg-accent hover:bg-accent-hover text-white text-sm font-bold rounded-lg transition-colors"
-            >
-              Read Full Docs (skill.md)
-            </a>
-            <span className="text-xs text-slate-500">API key shown once — save it immediately</span>
           </div>
         </div>
       </section>
