@@ -3,9 +3,10 @@ import { z } from 'zod';
 import { authenticate, agentOnly } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { executeMarketOrder } from '../services/trading.js';
+import { marketData } from '../services/binanceFeed.js';
 
 const placeOrderSchema = z.object({
-  symbol: z.enum(['BTC', 'ETH', 'SOL']),
+  symbol: z.enum(['BTC', 'ETH', 'TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR']),
   side: z.enum(['buy', 'sell']),
   type: z.enum(['market', 'limit', 'stop']),
   size: z.number().positive().max(1000000),
@@ -31,7 +32,6 @@ export default async function orderRoutes(fastify: FastifyInstance) {
     }
 
     // Get current price for market orders
-    const { marketData } = await import('../services/binanceFeed.js');
     const prices = marketData.getPrices();
     const currentPrice = prices[symbol] || null;
 

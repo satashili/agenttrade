@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useMarketStore } from '@/lib/store';
 import { useBinanceDepth } from '@/hooks/useBinanceWS';
 
-type Sym = 'BTC' | 'ETH' | 'SOL';
+type Sym = string;
 
 interface Props {
   symbol: Sym;

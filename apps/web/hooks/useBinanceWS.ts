@@ -2,14 +2,42 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-const REST_BASE = 'https://data-api.binance.vision/api/v3';
-const WS_BASE = 'wss://data-stream.binance.vision/stream?streams=';
+const SPOT_REST = 'https://data-api.binance.vision/api/v3';
+const FUTURES_REST = 'https://fapi.binance.com/fapi/v1';
+const SPOT_WS = 'wss://data-stream.binance.vision/stream?streams=';
+const FUTURES_WS = 'wss://fstream.binance.com/stream?streams=';
 
-const BINANCE_PAIRS: Record<string, string> = {
+const SPOT_PAIRS: Record<string, string> = {
   BTC: 'BTCUSDT',
   ETH: 'ETHUSDT',
-  SOL: 'SOLUSDT',
 };
+
+const EQUITY_PAIRS: Record<string, string> = {
+  TSLA: 'TSLAUSDT',
+  AMZN: 'AMZNUSDT',
+  COIN: 'COINUSDT',
+  MSTR: 'MSTRUSDT',
+  INTC: 'INTCUSDT',
+  HOOD: 'HOODUSDT',
+  CRCL: 'CRCLUSDT',
+  PLTR: 'PLTRUSDT',
+};
+
+function isEquity(symbol: string): boolean {
+  return symbol in EQUITY_PAIRS;
+}
+
+function getPair(symbol: string): string {
+  return SPOT_PAIRS[symbol] || EQUITY_PAIRS[symbol] || `${symbol}USDT`;
+}
+
+function getRestBase(symbol: string): string {
+  return isEquity(symbol) ? FUTURES_REST : SPOT_REST;
+}
+
+function getWsBase(symbol: string): string {
+  return isEquity(symbol) ? FUTURES_WS : SPOT_WS;
+}
 
 export interface KlineData {
   time: number;
@@ -33,7 +61,7 @@ export interface BinanceOrderBook {
 
 export type TimeframeKey = '1m' | '5m' | '15m' | '1h' | '4h';
 
-// ─── WebSocket Manager (Batched) ────────────────────────────
+// ─── WebSocket Manager (Batched, per base URL) ────────────────
 type StreamHandler = (data: any) => void;
 
 class BinanceWSManager {
@@ -45,6 +73,11 @@ class BinanceWSManager {
   private connectionAttempts = 0;
   private maxAttempts = 5;
   private currentStreamsUrl = '';
+  private baseUrl: string;
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl;
+  }
 
   subscribe(stream: string, handler: StreamHandler) {
     this.handlers.set(stream, handler);
@@ -73,7 +106,7 @@ class BinanceWSManager {
   }
 
   private getStreamsUrl(): string {
-    return WS_BASE + Array.from(this.handlers.keys()).join('/');
+    return this.baseUrl + Array.from(this.handlers.keys()).join('/');
   }
 
   private connect() {
@@ -153,19 +186,25 @@ class BinanceWSManager {
   }
 }
 
-const wsManager = new BinanceWSManager();
+const spotWsManager = new BinanceWSManager(SPOT_WS);
+const futuresWsManager = new BinanceWSManager(FUTURES_WS);
+
+function getWsManager(symbol: string): BinanceWSManager {
+  return isEquity(symbol) ? futuresWsManager : spotWsManager;
+}
 
 // ─── Kline Hook ──────────────────────────────────────────────
 export function useBinanceKline(symbol: string, timeframe: TimeframeKey = '1m') {
   const [klines, setKlines] = useState<KlineData[]>([]);
   const [loading, setLoading] = useState(true);
   const wsActiveRef = useRef(false);
-  const pair = BINANCE_PAIRS[symbol] || `${symbol}USDT`;
+  const pair = getPair(symbol);
   const pairLc = pair.toLowerCase();
+  const restBase = getRestBase(symbol);
 
   const fetchKlines = useCallback(async () => {
     try {
-      const res = await fetch(`${REST_BASE}/klines?symbol=${pair}&interval=${timeframe}&limit=300`);
+      const res = await fetch(`${restBase}/klines?symbol=${pair}&interval=${timeframe}&limit=300`);
       const data = await res.json();
       if (Array.isArray(data)) {
         const parsed: KlineData[] = data.map((d: any) => ({
@@ -182,7 +221,7 @@ export function useBinanceKline(symbol: string, timeframe: TimeframeKey = '1m') 
     } catch {
       setLoading(false);
     }
-  }, [pair, timeframe]);
+  }, [pair, timeframe, restBase]);
 
   useEffect(() => {
     setLoading(true);
@@ -193,8 +232,9 @@ export function useBinanceKline(symbol: string, timeframe: TimeframeKey = '1m') 
 
   useEffect(() => {
     const stream = `${pairLc}@kline_${timeframe}`;
+    const mgr = getWsManager(symbol);
 
-    wsManager.subscribe(stream, (d) => {
+    mgr.subscribe(stream, (d) => {
       if (d?.k) {
         wsActiveRef.current = true;
         const k = d.k;
@@ -221,10 +261,10 @@ export function useBinanceKline(symbol: string, timeframe: TimeframeKey = '1m') 
     });
 
     return () => {
-      wsManager.unsubscribe(stream);
+      mgr.unsubscribe(stream);
       wsActiveRef.current = false;
     };
-  }, [pairLc, timeframe]);
+  }, [pairLc, timeframe, symbol]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -242,8 +282,9 @@ export function useBinanceKline(symbol: string, timeframe: TimeframeKey = '1m') 
 export function useBinanceDepth(symbol: string) {
   const [orderBook, setOrderBook] = useState<BinanceOrderBook>({ bids: [], asks: [] });
   const wsActiveRef = useRef(false);
-  const pair = BINANCE_PAIRS[symbol] || `${symbol}USDT`;
+  const pair = getPair(symbol);
   const pairLc = pair.toLowerCase();
+  const restBase = getRestBase(symbol);
 
   const parseDepth = useCallback((bids: string[][], asks: string[][]) => {
     let bidTotal = 0;
@@ -264,13 +305,13 @@ export function useBinanceDepth(symbol: string) {
 
   const fetchDepth = useCallback(async () => {
     try {
-      const res = await fetch(`${REST_BASE}/depth?symbol=${pair}&limit=20`);
+      const res = await fetch(`${restBase}/depth?symbol=${pair}&limit=20`);
       const d = await res.json();
       if (d.bids && d.asks) {
         parseDepth(d.bids, d.asks);
       }
     } catch { /* silent */ }
-  }, [pair, parseDepth]);
+  }, [pair, parseDepth, restBase]);
 
   useEffect(() => {
     fetchDepth();
@@ -278,8 +319,9 @@ export function useBinanceDepth(symbol: string) {
 
   useEffect(() => {
     const stream = `${pairLc}@depth20@1000ms`;
+    const mgr = getWsManager(symbol);
 
-    wsManager.subscribe(stream, (d) => {
+    mgr.subscribe(stream, (d) => {
       if (d?.b && d?.a) {
         wsActiveRef.current = true;
         parseDepth(d.b, d.a);
@@ -287,10 +329,10 @@ export function useBinanceDepth(symbol: string) {
     });
 
     return () => {
-      wsManager.unsubscribe(stream);
+      mgr.unsubscribe(stream);
       wsActiveRef.current = false;
     };
-  }, [pairLc, parseDepth]);
+  }, [pairLc, parseDepth, symbol]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -308,12 +350,13 @@ export function useBinanceDepth(symbol: string) {
 export function useBinanceAggTrades(symbol: string) {
   const [trades, setTrades] = useState<Array<{ price: number; qty: number; isBuyerMaker: boolean; time: number }>>([]);
   const wsActiveRef = useRef(false);
-  const pair = BINANCE_PAIRS[symbol] || `${symbol}USDT`;
+  const pair = getPair(symbol);
   const pairLc = pair.toLowerCase();
+  const restBase = getRestBase(symbol);
 
   const fetchTrades = useCallback(async () => {
     try {
-      const res = await fetch(`${REST_BASE}/trades?symbol=${pair}&limit=30`);
+      const res = await fetch(`${restBase}/trades?symbol=${pair}&limit=30`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setTrades(data.map((d: any) => ({
@@ -324,7 +367,7 @@ export function useBinanceAggTrades(symbol: string) {
         })).reverse());
       }
     } catch { /* silent */ }
-  }, [pair]);
+  }, [pair, restBase]);
 
   useEffect(() => {
     fetchTrades();
@@ -332,8 +375,9 @@ export function useBinanceAggTrades(symbol: string) {
 
   useEffect(() => {
     const stream = `${pairLc}@aggTrade`;
+    const mgr = getWsManager(symbol);
 
-    wsManager.subscribe(stream, (d) => {
+    mgr.subscribe(stream, (d) => {
       if (d?.p) {
         wsActiveRef.current = true;
         setTrades(prev => {
@@ -349,10 +393,10 @@ export function useBinanceAggTrades(symbol: string) {
     });
 
     return () => {
-      wsManager.unsubscribe(stream);
+      mgr.unsubscribe(stream);
       wsActiveRef.current = false;
     };
-  }, [pairLc]);
+  }, [pairLc, symbol]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -383,8 +427,9 @@ export function useBinanceTicker(symbol: string) {
   const [priceDirection, setPriceDirection] = useState<'up' | 'down' | null>(null);
   const wsActiveRef = useRef(false);
   const lastPriceRef = useRef<number>(0);
-  const pair = BINANCE_PAIRS[symbol] || `${symbol}USDT`;
+  const pair = getPair(symbol);
   const pairLc = pair.toLowerCase();
+  const restBase = getRestBase(symbol);
 
   const parseTicker = useCallback((d: any): TickerData => {
     return {
@@ -409,13 +454,13 @@ export function useBinanceTicker(symbol: string) {
 
   const fetchTicker = useCallback(async () => {
     try {
-      const res = await fetch(`${REST_BASE}/ticker/24hr?symbol=${pair}`);
+      const res = await fetch(`${restBase}/ticker/24hr?symbol=${pair}`);
       const d = await res.json();
       if (d.lastPrice) {
         updateTicker(parseTicker(d));
       }
     } catch { /* silent */ }
-  }, [pair, parseTicker, updateTicker]);
+  }, [pair, parseTicker, updateTicker, restBase]);
 
   useEffect(() => {
     lastPriceRef.current = 0;
@@ -427,8 +472,9 @@ export function useBinanceTicker(symbol: string) {
 
   useEffect(() => {
     const stream = `${pairLc}@ticker`;
+    const mgr = getWsManager(symbol);
 
-    wsManager.subscribe(stream, (d) => {
+    mgr.subscribe(stream, (d) => {
       if (d?.c) {
         wsActiveRef.current = true;
         updateTicker(parseTicker(d));
@@ -436,10 +482,10 @@ export function useBinanceTicker(symbol: string) {
     });
 
     return () => {
-      wsManager.unsubscribe(stream);
+      mgr.unsubscribe(stream);
       wsActiveRef.current = false;
     };
-  }, [pairLc, parseTicker, updateTicker]);
+  }, [pairLc, parseTicker, updateTicker, symbol]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {

@@ -12,7 +12,7 @@ import { NewsTicker } from '@/components/trade/NewsTicker';
 import { ChatPanel } from '@/components/trade/ChatPanel';
 import { MarketStats } from '@/components/trade/MarketStats';
 
-type Sym = 'BTC' | 'ETH' | 'SOL';
+type Sym = 'BTC' | 'ETH' | 'TSLA' | 'AMZN' | 'COIN' | 'MSTR' | 'INTC' | 'HOOD' | 'CRCL' | 'PLTR';
 type RightTab = 'orderbook' | 'chat' | 'stats';
 
 export default function TradePage() {

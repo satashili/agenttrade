@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore, useMarketStore } from '@/lib/store';
 import { api } from '@/lib/api';
 
-type Sym = 'BTC' | 'ETH' | 'SOL';
+type Sym = string;
 type Tab = 'open' | 'history' | 'positions' | 'assets' | 'activity';
 
 interface Props { symbol: Sym; }

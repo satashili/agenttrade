@@ -4,7 +4,7 @@ import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickData, Histogr
 import { useBinanceKline, type TimeframeKey } from '@/hooks/useBinanceWS';
 
 interface Props {
-  symbol: 'BTC' | 'ETH' | 'SOL';
+  symbol: string;
   height?: number;
 }
 

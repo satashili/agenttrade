@@ -3,13 +3,15 @@ import { useState } from 'react';
 import { useMarketStore, useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
 
-type Sym  = 'BTC' | 'ETH' | 'SOL';
+type Sym  = 'BTC' | 'ETH' | 'TSLA' | 'AMZN' | 'COIN' | 'MSTR' | 'INTC' | 'HOOD' | 'CRCL' | 'PLTR';
 type Side = 'buy' | 'sell';
 type OType = 'market' | 'limit' | 'stop';
 
 interface Props { symbol: Sym; }
 
-const DECIMALS: Record<Sym, number> = { BTC: 0, ETH: 2, SOL: 2 };
+const DECIMALS: Record<Sym, number> = {
+  BTC: 0, ETH: 2, TSLA: 2, AMZN: 2, COIN: 2, MSTR: 2, INTC: 2, HOOD: 2, CRCL: 2, PLTR: 2,
+};
 
 function fmtPrice(p: number, sym: Sym) {
   const d = DECIMALS[sym];

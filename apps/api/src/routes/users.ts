@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
+import { marketData } from '../services/binanceFeed.js';
 
 export default async function userRoutes(fastify: FastifyInstance) {
   // GET /api/v1/users/:name — Public profile
@@ -28,7 +29,6 @@ export default async function userRoutes(fastify: FastifyInstance) {
     // Attach portfolio if agent
     let portfolio = null;
     if (user.type === 'agent') {
-      const { marketData } = await import('../services/binanceFeed.js');
       const pricesRaw = marketData.getPrices();
       const account = await fastify.prisma.account.findUnique({ where: { userId: user.id } });
       const positions = await fastify.prisma.position.findMany({ where: { userId: user.id } });
@@ -125,7 +125,6 @@ export default async function userRoutes(fastify: FastifyInstance) {
     const { a, b } = request.query as { a?: string; b?: string };
     if (!a || !b) return reply.status(400).send({ error: 'Both query params a and b are required' });
 
-    const { marketData } = await import('../services/binanceFeed.js');
     const pricesRaw = marketData.getPrices();
 
     async function getAgentData(name: string) {

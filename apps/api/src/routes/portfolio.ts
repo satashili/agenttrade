@@ -68,4 +68,94 @@ export default async function portfolioRoutes(fastify: FastifyInstance) {
       positions: positionsOut,
     });
   });
+
+  // GET /api/v1/portfolio/history — Historical PnL curve
+  fastify.get('/portfolio/history', {
+    preHandler: [authenticate, agentOnly],
+  }, async (request, reply) => {
+    const userId = request.authUser!.id;
+
+    const account = await fastify.prisma.account.findUnique({ where: { userId } });
+    if (!account) return reply.status(404).send({ error: 'Account not found' });
+
+    const totalDeposited = parseFloat(account.totalDeposited.toString());
+
+    // Get all filled orders chronologically
+    const orders = await fastify.prisma.order.findMany({
+      where: { userId, status: 'filled' },
+      orderBy: { filledAt: 'asc' },
+      select: {
+        symbol: true, side: true, size: true,
+        fillPrice: true, fillValue: true, fee: true, filledAt: true,
+      },
+    });
+
+    if (orders.length === 0) {
+      return reply.send({
+        data: [{
+          timestamp: account.updatedAt.toISOString(),
+          totalValue: totalDeposited,
+          cashBalance: totalDeposited,
+          positionValue: 0,
+          pnl: 0,
+          pnlPct: 0,
+        }],
+      });
+    }
+
+    // Replay order history to build equity curve
+    let cash = totalDeposited;
+    const positions: Record<string, { size: number; avgCost: number }> = {};
+    const curve: Array<{
+      timestamp: string;
+      totalValue: number;
+      cashBalance: number;
+      positionValue: number;
+      pnl: number;
+      pnlPct: number;
+    }> = [];
+
+    for (const o of orders) {
+      const size = parseFloat(o.size.toString());
+      const price = parseFloat(o.fillPrice!.toString());
+      const value = parseFloat(o.fillValue!.toString());
+      const fee = parseFloat(o.fee!.toString());
+
+      if (!positions[o.symbol]) positions[o.symbol] = { size: 0, avgCost: 0 };
+      const pos = positions[o.symbol];
+
+      if (o.side === 'buy') {
+        cash -= (value + fee);
+        const newSize = pos.size + size;
+        pos.avgCost = pos.size === 0 ? price : (pos.size * pos.avgCost + size * price) / newSize;
+        pos.size = newSize;
+      } else {
+        cash += (value - fee);
+        pos.size = Math.max(0, pos.size - size);
+        if (pos.size === 0) pos.avgCost = 0;
+      }
+
+      // Compute position value — use fillPrice for traded symbol as market price at that time
+      let positionValue = 0;
+      for (const [sym, p] of Object.entries(positions)) {
+        const priceAtTime = sym === o.symbol ? price : p.avgCost;
+        positionValue += p.size * priceAtTime;
+      }
+
+      const totalValue = cash + positionValue;
+      const pnl = totalValue - totalDeposited;
+      const pnlPct = (pnl / totalDeposited) * 100;
+
+      curve.push({
+        timestamp: o.filledAt!.toISOString(),
+        totalValue: parseFloat(totalValue.toFixed(2)),
+        cashBalance: parseFloat(cash.toFixed(2)),
+        positionValue: parseFloat(positionValue.toFixed(2)),
+        pnl: parseFloat(pnl.toFixed(2)),
+        pnlPct: parseFloat(pnlPct.toFixed(4)),
+      });
+    }
+
+    return reply.send({ data: curve });
+  });
 }

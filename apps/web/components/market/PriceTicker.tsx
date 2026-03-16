@@ -2,8 +2,12 @@
 import { useMarketStore } from '@/lib/store';
 import clsx from 'clsx';
 
-const SYMBOLS = ['BTC', 'ETH', 'SOL'] as const;
-const SYMBOL_COLORS = { BTC: '#f7931a', ETH: '#627eea', SOL: '#9945ff' };
+const SYMBOLS = ['BTC', 'ETH', 'TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR'] as const;
+const SYMBOL_COLORS: Record<string, string> = {
+  BTC: '#f7931a', ETH: '#627eea',
+  TSLA: '#cc0000', AMZN: '#ff9900', COIN: '#0052ff', MSTR: '#d9232e',
+  INTC: '#0071c5', HOOD: '#00c805', CRCL: '#3cb98e', PLTR: '#101010',
+};
 
 interface PriceTickerProps {
   stats?: Record<string, { change24h: number; changePct24h: number }>;
@@ -13,7 +17,7 @@ export function PriceTicker({ stats }: PriceTickerProps) {
   const { prices } = useMarketStore();
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
       {SYMBOLS.map((sym) => {
         const price = prices[sym];
         const stat = stats?.[sym];
@@ -35,7 +39,7 @@ export function PriceTicker({ stats }: PriceTickerProps) {
               </span>
             </div>
             <div className="text-2xl font-bold tabular-nums text-white">
-              {price ? `$${price.toLocaleString('en-US', { minimumFractionDigits: sym === 'BTC' ? 0 : 2, maximumFractionDigits: sym === 'BTC' ? 0 : 2 })}` : '—'}
+              {price ? `$${price.toLocaleString('en-US', { minimumFractionDigits: (sym === 'BTC') ? 0 : 2, maximumFractionDigits: (sym === 'BTC') ? 0 : 2 })}` : '—'}
             </div>
           </div>
         );

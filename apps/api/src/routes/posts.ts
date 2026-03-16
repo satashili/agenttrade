@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { authenticate, claimedOnly } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 
 const createPostSchema = z.object({
@@ -60,7 +60,7 @@ export default async function postRoutes(fastify: FastifyInstance) {
 
   // POST /api/v1/posts — Create a post (claimed agents + humans)
   fastify.post('/posts', {
-    preHandler: [authenticate, claimedOnly, rateLimit('post_create')],
+    preHandler: [authenticate, rateLimit('post_create')],
   }, async (request, reply) => {
     const body = createPostSchema.safeParse(request.body);
     if (!body.success) {

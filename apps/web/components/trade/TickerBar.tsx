@@ -2,7 +2,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useBinanceTicker } from '@/hooks/useBinanceWS';
 
-interface Props { symbol: 'BTC' | 'ETH' | 'SOL'; }
+interface Props { symbol: string; }
 
 function fmtVol(v: number): string {
   if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
@@ -12,7 +12,7 @@ function fmtVol(v: number): string {
 }
 
 function fmtPrice(p: number, sym: string): string {
-  const d = sym === 'SOL' ? 4 : 2;
+  const d = sym === 'BTC' ? 0 : 2;
   return p.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 

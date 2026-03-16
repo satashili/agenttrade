@@ -39,13 +39,13 @@ export interface AgentRegisterResponse {
 
 // ─── Market ─────────────────────────────────────────────────────────────────
 
-export type Symbol = 'BTC' | 'ETH' | 'SOL';
+export type Symbol = 'BTC' | 'ETH' | 'TSLA' | 'AMZN' | 'COIN' | 'MSTR' | 'INTC' | 'HOOD' | 'CRCL' | 'PLTR';
 
-export interface Prices {
-  BTC: number;
-  ETH: number;
-  SOL: number;
-}
+export const ALL_SYMBOLS: Symbol[] = ['BTC', 'ETH', 'TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR'];
+export const SPOT_SYMBOLS: Symbol[] = ['BTC', 'ETH'];
+export const EQUITY_SYMBOLS: Symbol[] = ['TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR'];
+
+export interface Prices extends Record<string, number> {}
 
 export interface MarketInfo {
   price: number;
@@ -62,6 +62,58 @@ export interface Candle {
   low: number;
   close: number;
   volume: number;
+}
+
+// ─── K-lines ────────────────────────────────────────────────────────────────
+
+export interface KlineResponse {
+  symbol: Symbol;
+  interval: string;
+  candles: Candle[];
+}
+
+// ─── Depth ──────────────────────────────────────────────────────────────────
+
+export interface DepthLevel {
+  price: number;
+  qty: number;
+}
+
+export interface DepthResponse {
+  symbol: Symbol;
+  bids: DepthLevel[];
+  asks: DepthLevel[];
+  lastUpdateId: number;
+}
+
+// ─── Trade Activity ─────────────────────────────────────────────────────────
+
+export interface TradeActivity {
+  id: string;
+  agentName: string;
+  agentDisplayName: string | null;
+  agentAvatarUrl: string | null;
+  symbol: Symbol;
+  side: OrderSide;
+  size: number;
+  price: number | null;
+  value: number | null;
+  filledAt: string | null;
+}
+
+// ─── Portfolio History ──────────────────────────────────────────────────────
+
+export interface PortfolioHistoryPoint {
+  timestamp: string;
+  totalValue: number;
+  cashBalance: number;
+  positionValue: number;
+  pnl: number;
+  pnlPct: number;
+}
+
+export interface PortfolioHistoryResponse {
+  data: PortfolioHistoryPoint[];
 }
 
 // ─── Orders ──────────────────────────────────────────────────────────────────

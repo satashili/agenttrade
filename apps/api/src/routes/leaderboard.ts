@@ -9,7 +9,7 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
     const prices = marketData.getPrices();
 
     const agents = await fastify.prisma.user.findMany({
-      where: { type: 'agent', claimStatus: 'claimed' },
+      where: { type: 'agent' },
       select: {
         id: true, name: true, displayName: true, avatarUrl: true,
         aiModel: true, karma: true,
@@ -18,6 +18,51 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
         _count: { select: { orders: { where: { status: 'filled' } } } },
       },
     });
+
+    // Batch-fetch all filled orders to compute winRate
+    const agentIds = agents.map(a => a.id);
+    const allOrders = agentIds.length > 0
+      ? await fastify.prisma.order.findMany({
+          where: { userId: { in: agentIds }, status: 'filled' },
+          orderBy: { filledAt: 'asc' },
+          select: { userId: true, symbol: true, side: true, size: true, fillPrice: true },
+        })
+      : [];
+
+    // Group orders by userId
+    const ordersByAgent = new Map<string, typeof allOrders>();
+    for (const o of allOrders) {
+      if (!ordersByAgent.has(o.userId)) ordersByAgent.set(o.userId, []);
+      ordersByAgent.get(o.userId)!.push(o);
+    }
+
+    // Compute winRate by replaying order history per agent
+    function computeWinRate(orders: typeof allOrders): number {
+      const positions: Record<string, { size: number; avgCost: number }> = {};
+      let wins = 0;
+      let losses = 0;
+
+      for (const o of orders) {
+        const size = parseFloat(o.size.toString());
+        const price = parseFloat(o.fillPrice?.toString() || '0');
+        if (!positions[o.symbol]) positions[o.symbol] = { size: 0, avgCost: 0 };
+        const pos = positions[o.symbol];
+
+        if (o.side === 'buy') {
+          const newSize = pos.size + size;
+          pos.avgCost = pos.size === 0 ? price : (pos.size * pos.avgCost + size * price) / newSize;
+          pos.size = newSize;
+        } else {
+          if (price > pos.avgCost) wins++;
+          else losses++;
+          pos.size = Math.max(0, pos.size - size);
+          if (pos.size === 0) pos.avgCost = 0;
+        }
+      }
+
+      const total = wins + losses;
+      return total > 0 ? parseFloat(((wins / total) * 100).toFixed(1)) : 0;
+    }
 
     const ranked = agents.map(agent => {
       const cashBalance = parseFloat(agent.account?.cashBalance.toString() || '100000');
@@ -28,6 +73,9 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
       }
       const totalValue = cashBalance + positionValue;
       const totalPnlPct = ((totalValue - totalDeposited) / totalDeposited) * 100;
+
+      const agentOrders = ordersByAgent.get(agent.id) || [];
+      const winRate = computeWinRate(agentOrders);
 
       return {
         agent: {
@@ -41,6 +89,7 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
         totalValue,
         totalPnlPct,
         tradeCount: agent._count.orders,
+        winRate,
       };
     }).sort((a, b) => b.totalPnlPct - a.totalPnlPct).slice(0, take);
 
@@ -52,7 +101,7 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
         totalPnlPct: r.totalPnlPct,
         weekPnlPct: r.totalPnlPct,
         tradeCount: r.tradeCount,
-        winRate: 0,
+        winRate: r.winRate,
       })),
     });
   });

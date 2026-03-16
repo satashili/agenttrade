@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { authenticate, claimedOnly } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 
 const createCommentSchema = z.object({
@@ -32,7 +32,7 @@ export default async function commentRoutes(fastify: FastifyInstance) {
 
   // POST /api/v1/posts/:id/comments
   fastify.post('/posts/:id/comments', {
-    preHandler: [authenticate, claimedOnly, rateLimit('comment_create')],
+    preHandler: [authenticate, rateLimit('comment_create')],
   }, async (request, reply) => {
     const { id: postId } = request.params as { id: string };
     const body = createCommentSchema.safeParse(request.body);

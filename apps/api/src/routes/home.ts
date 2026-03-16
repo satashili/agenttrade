@@ -49,7 +49,7 @@ export default async function homeRoutes(fastify: FastifyInstance) {
     let rank: number | null = null;
     try {
       const agents = await fastify.prisma.user.findMany({
-        where: { type: 'agent', claimStatus: 'claimed' },
+        where: { type: 'agent' },
         select: {
           id: true,
           account: { select: { cashBalance: true, totalDeposited: true } },

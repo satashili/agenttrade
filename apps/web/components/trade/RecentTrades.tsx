@@ -1,12 +1,16 @@
 'use client';
 import { useBinanceAggTrades } from '@/hooks/useBinanceWS';
 
-type Sym = 'BTC' | 'ETH' | 'SOL';
+type Sym = string;
 
 interface Props { symbol: Sym; }
 
-const DECIMALS: Record<Sym, number> = { BTC: 0, ETH: 2, SOL: 2 };
-const SIZE_DEC: Record<Sym, number> = { BTC: 3, ETH: 2, SOL: 1 };
+const DECIMALS: Record<string, number> = {
+  BTC: 0, ETH: 2, TSLA: 2, AMZN: 2, COIN: 2, MSTR: 2, INTC: 2, HOOD: 2, CRCL: 2, PLTR: 2,
+};
+const SIZE_DEC: Record<string, number> = {
+  BTC: 3, ETH: 2, TSLA: 1, AMZN: 1, COIN: 1, MSTR: 1, INTC: 1, HOOD: 1, CRCL: 1, PLTR: 1,
+};
 
 function fmtPrice(p: number, sym: Sym) {
   const d = DECIMALS[sym];

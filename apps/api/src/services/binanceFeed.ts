@@ -1,12 +1,25 @@
 import WebSocket from 'ws';
 import { Server as SocketServer } from 'socket.io';
+import { ALL_SYMBOLS, SPOT_SYMBOLS, EQUITY_SYMBOLS } from '@agenttrade/types';
 
-const SYMBOLS = ['BTC', 'ETH', 'SOL'];
-const BINANCE_PAIRS: Record<string, string> = {
+const SPOT_PAIRS: Record<string, string> = {
   BTC: 'btcusdt',
   ETH: 'ethusdt',
-  SOL: 'solusdt',
 };
+
+const EQUITY_PAIRS: Record<string, string> = {
+  TSLA: 'tslausdt',
+  AMZN: 'amznusdt',
+  COIN: 'coinusdt',
+  MSTR: 'mstrusdt',
+  INTC: 'intcusdt',
+  HOOD: 'hoodusdt',
+  CRCL: 'crclusdt',
+  PLTR: 'pltrusdt',
+};
+
+// Combined lookup for symbol resolution
+const ALL_PAIRS: Record<string, string> = { ...SPOT_PAIRS, ...EQUITY_PAIRS };
 
 export interface MarketStats {
   price: number;
@@ -18,7 +31,7 @@ export interface MarketStats {
   volume24h: number;
 }
 
-// In-memory market data store (replaces Redis)
+// In-memory market data store
 class MarketDataStore {
   prices: Record<string, number> = {};
   stats: Record<string, MarketStats> = {};
@@ -35,27 +48,29 @@ class MarketDataStore {
 export const marketData = new MarketDataStore();
 
 export class BinanceFeed {
-  private ws: WebSocket | null = null;
-  private reconnectDelay = 1000;
+  private spotWs: WebSocket | null = null;
+  private futuresWs: WebSocket | null = null;
+  private reconnectDelay: Record<string, number> = { spot: 1000, futures: 1000 };
   private io!: SocketServer;
 
   async connect(io: SocketServer) {
     this.io = io;
-    this.connectWS();
+    this.connectSpot();
+    this.connectFutures();
   }
 
-  private connectWS() {
-    const streams = SYMBOLS.map(s => `${BINANCE_PAIRS[s]}@ticker`).join('/');
+  private connectSpot() {
+    const streams = SPOT_SYMBOLS.map(s => `${SPOT_PAIRS[s]}@ticker`).join('/');
     const url = `wss://stream.binance.com:9443/stream?streams=${streams}`;
 
-    this.ws = new WebSocket(url);
+    this.spotWs = new WebSocket(url);
 
-    this.ws.on('open', () => {
-      console.log('[BinanceFeed] Connected');
-      this.reconnectDelay = 1000;
+    this.spotWs.on('open', () => {
+      console.log('[BinanceFeed] Spot connected');
+      this.reconnectDelay.spot = 1000;
     });
 
-    this.ws.on('message', (rawData: Buffer) => {
+    this.spotWs.on('message', (rawData: Buffer) => {
       try {
         const msg = JSON.parse(rawData.toString());
         if (msg.stream && msg.data) {
@@ -64,23 +79,57 @@ export class BinanceFeed {
       } catch { /* ignore */ }
     });
 
-    this.ws.on('close', () => {
-      console.warn('[BinanceFeed] Disconnected. Reconnecting in', this.reconnectDelay, 'ms');
+    this.spotWs.on('close', () => {
+      console.warn('[BinanceFeed] Spot disconnected. Reconnecting in', this.reconnectDelay.spot, 'ms');
       setTimeout(() => {
-        this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
-        this.connectWS();
-      }, this.reconnectDelay);
+        this.reconnectDelay.spot = Math.min(this.reconnectDelay.spot * 2, 30000);
+        this.connectSpot();
+      }, this.reconnectDelay.spot);
     });
 
-    this.ws.on('error', (err: Error) => {
-      console.error('[BinanceFeed] WS error:', err.message);
-      this.ws?.terminate();
+    this.spotWs.on('error', (err: Error) => {
+      console.error('[BinanceFeed] Spot WS error:', err.message);
+      this.spotWs?.terminate();
+    });
+  }
+
+  private connectFutures() {
+    const streams = EQUITY_SYMBOLS.map(s => `${EQUITY_PAIRS[s]}@ticker`).join('/');
+    const url = `wss://fstream.binance.com/stream?streams=${streams}`;
+
+    this.futuresWs = new WebSocket(url);
+
+    this.futuresWs.on('open', () => {
+      console.log('[BinanceFeed] Futures connected');
+      this.reconnectDelay.futures = 1000;
+    });
+
+    this.futuresWs.on('message', (rawData: Buffer) => {
+      try {
+        const msg = JSON.parse(rawData.toString());
+        if (msg.stream && msg.data) {
+          this.handleTicker(msg.data);
+        }
+      } catch { /* ignore */ }
+    });
+
+    this.futuresWs.on('close', () => {
+      console.warn('[BinanceFeed] Futures disconnected. Reconnecting in', this.reconnectDelay.futures, 'ms');
+      setTimeout(() => {
+        this.reconnectDelay.futures = Math.min(this.reconnectDelay.futures * 2, 30000);
+        this.connectFutures();
+      }, this.reconnectDelay.futures);
+    });
+
+    this.futuresWs.on('error', (err: Error) => {
+      console.error('[BinanceFeed] Futures WS error:', err.message);
+      this.futuresWs?.terminate();
     });
   }
 
   private handleTicker(d: any) {
     const pairUpper = (d.s as string || '').toUpperCase();
-    const symbol = SYMBOLS.find(s => pairUpper === `${s}USDT`);
+    const symbol = ALL_SYMBOLS.find(s => pairUpper === `${s}USDT`);
     if (!symbol) return;
 
     const price = parseFloat(d.c);

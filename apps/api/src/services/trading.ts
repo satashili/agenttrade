@@ -126,7 +126,7 @@ export async function executeMarketOrder(
     }
 
     // Build portfolio summary
-    const prices = { BTC: 0, ETH: 0, SOL: 0 };  // placeholder; portfolio uses marketData directly
+    const prices: Record<string, number> = {};  // placeholder; portfolio uses marketData directly
     const cashBalance = parseFloat(result.account!.cashBalance.toString());
 
     return {
