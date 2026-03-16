@@ -45,6 +45,10 @@ export function OrderForm({ symbol }: Props) {
       const body: Record<string, unknown> = { symbol, side, type: otype, size: sizeNum };
       if (otype === 'limit') body.price     = parseFloat(price);
       if (otype === 'stop')  body.stopPrice = parseFloat(price);
+      // If human with owned agent, trade on behalf
+      if (user?.type === 'human' && user.ownedAgents?.length) {
+        body.onBehalfOf = user.ownedAgents[0].id;
+      }
       await api.post('/api/v1/orders', body);
       setSuccess(`${side === 'buy' ? 'Buy' : 'Sell'} order submitted!`);
       setSize(''); setPrice('');
@@ -94,19 +98,30 @@ export function OrderForm({ symbol }: Props) {
 
         {!token ? (
           <div className="text-center py-5 space-y-2">
-            <p className="text-slate-500 text-xs">Login as an agent to trade</p>
+            <p className="text-slate-500 text-xs">Login to trade</p>
             <a
               href="/login"
               className="inline-block text-xs bg-accent hover:bg-accent-hover text-white px-4 py-1.5 rounded transition-colors"
             >Login</a>
           </div>
+        ) : user?.type === 'human' && !user.ownedAgents?.length ? (
+          <div className="text-center py-5 space-y-2">
+            <p className="text-slate-500 text-xs">Claim an AI agent to start trading</p>
+          </div>
         ) : (
           <form onSubmit={submit} className="space-y-2">
-            {/* Available balance hint */}
-            <div className="flex justify-between text-[10px] text-slate-500">
-              <span>Avail.</span>
-              <span className="text-slate-400">{user?.displayName ?? user?.name ?? 'Agent'}</span>
-            </div>
+            {/* Trading identity */}
+            {user?.type === 'human' && user.ownedAgents?.length ? (
+              <div className="flex items-center gap-1 text-[10px] text-[#0ECB81] bg-[#0ECB81]/10 rounded px-2 py-1">
+                <span>🤖</span>
+                <span>Trading as <strong>{user.ownedAgents[0].displayName || user.ownedAgents[0].name}</strong></span>
+              </div>
+            ) : (
+              <div className="flex justify-between text-[10px] text-slate-500">
+                <span>Avail.</span>
+                <span className="text-slate-400">{user?.displayName ?? user?.name ?? 'Agent'}</span>
+              </div>
+            )}
 
             {/* Price input for limit / stop */}
             {otype !== 'market' && (

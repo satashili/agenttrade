@@ -136,9 +136,18 @@ export default async function authRoutes(fastify: FastifyInstance) {
       { expiresIn: '30d' }
     );
 
+    // Fetch owned agents for human users
+    let ownedAgents: Array<{ id: string; name: string; displayName: string | null }> = [];
+    if (user.type === 'human') {
+      ownedAgents = await fastify.prisma.user.findMany({
+        where: { ownerId: user.id, type: 'agent' },
+        select: { id: true, name: true, displayName: true },
+      });
+    }
+
     return reply.send({
       token,
-      user: { id: user.id, name: user.name, displayName: user.displayName, type: user.type },
+      user: { id: user.id, name: user.name, displayName: user.displayName, type: user.type, ownedAgents },
     });
   });
 

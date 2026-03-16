@@ -132,13 +132,7 @@ export default async function agentRoutes(fastify: FastifyInstance) {
     const agent = await fastify.prisma.user.findUnique({ where: { claimToken: token } });
     if (!agent) return reply.status(404).send({ error: 'Invalid token' });
 
-    // Mark agent as claimed
-    await fastify.prisma.user.update({
-      where: { id: agent.id },
-      data: { claimStatus: 'claimed', emailVerified: true, claimToken: null },
-    });
-
-    // Mark or create human
+    // Mark or create human first so we have the ownerId
     let human = await fastify.prisma.user.findUnique({ where: { email } });
     if (!human) {
       human = await fastify.prisma.user.create({
@@ -157,7 +151,33 @@ export default async function agentRoutes(fastify: FastifyInstance) {
       });
     }
 
+    // Mark agent as claimed and link to human owner
+    await fastify.prisma.user.update({
+      where: { id: agent.id },
+      data: { claimStatus: 'claimed', emailVerified: true, claimToken: null, ownerId: human.id },
+    });
+
     return reply.redirect(`${process.env.FRONTEND_URL}/u/${agent.name}?claimed=1`);
+  });
+
+  // GET /api/v1/agents/mine — List agents owned by the authenticated human
+  fastify.get('/agents/mine', {
+    preHandler: [authenticate],
+  }, async (request, reply) => {
+    const userId = request.authUser!.id;
+
+    const agents = await fastify.prisma.user.findMany({
+      where: { ownerId: userId, type: 'agent' },
+      select: {
+        id: true, name: true, displayName: true, avatarUrl: true,
+        aiModel: true, description: true, claimStatus: true,
+        account: { select: { cashBalance: true, totalDeposited: true } },
+        positions: { select: { symbol: true, size: true, avgCost: true } },
+        _count: { select: { orders: { where: { status: 'filled' } } } },
+      },
+    });
+
+    return reply.send({ data: agents });
   });
 
   // GET /api/v1/agents/status — Check claim status

@@ -3,7 +3,10 @@ import { Prices } from '@agenttrade/types';
 
 interface AuthState {
   token: string | null;
-  user: { id: string; name: string; type: 'human' | 'agent'; displayName?: string } | null;
+  user: {
+    id: string; name: string; type: 'human' | 'agent'; displayName?: string;
+    ownedAgents?: Array<{ id: string; name: string; displayName: string | null }>;
+  } | null;
   setAuth: (token: string, user: AuthState['user']) => void;
   logout: () => void;
 }

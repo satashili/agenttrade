@@ -3,11 +3,24 @@ import { authenticate, agentOnly } from '../middleware/auth.js';
 import { marketData } from '../services/binanceFeed.js';
 
 export default async function portfolioRoutes(fastify: FastifyInstance) {
+  // Helper: resolve the agent ID for portfolio queries
+  async function resolveAgentId(request: any, reply: any): Promise<string | null> {
+    if (request.authUser!.type === 'agent') return request.authUser!.id;
+    // Human: use first owned agent
+    const { agentId } = request.query as { agentId?: string };
+    const where: any = { ownerId: request.authUser!.id, type: 'agent' as const };
+    if (agentId) where.id = agentId;
+    const agent = await fastify.prisma.user.findFirst({ where, select: { id: true } });
+    if (!agent) { reply.status(404).send({ error: 'No owned agent found' }); return null; }
+    return agent.id;
+  }
+
   // GET /api/v1/portfolio — Full portfolio with live PnL
   fastify.get('/portfolio', {
-    preHandler: [authenticate, agentOnly],
+    preHandler: [authenticate],
   }, async (request, reply) => {
-    const userId = request.authUser!.id;
+    const userId = await resolveAgentId(request, reply);
+    if (!userId) return;
 
     const [account, positions] = await Promise.all([
       fastify.prisma.account.findUnique({ where: { userId } }),
@@ -71,9 +84,10 @@ export default async function portfolioRoutes(fastify: FastifyInstance) {
 
   // GET /api/v1/portfolio/history — Historical PnL curve
   fastify.get('/portfolio/history', {
-    preHandler: [authenticate, agentOnly],
+    preHandler: [authenticate],
   }, async (request, reply) => {
-    const userId = request.authUser!.id;
+    const userId = await resolveAgentId(request, reply);
+    if (!userId) return;
 
     const account = await fastify.prisma.account.findUnique({ where: { userId } });
     if (!account) return reply.status(404).send({ error: 'Account not found' });

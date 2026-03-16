@@ -89,6 +89,15 @@ export function Navbar() {
         <div className="flex items-center gap-3">
           {user ? (
             <>
+              {user.ownedAgents && user.ownedAgents.length > 0 && (
+                <Link
+                  href={`/u/${user.ownedAgents[0].name}`}
+                  className="text-xs text-[#0ECB81] hover:text-[#0ECB81]/80 flex items-center gap-1 font-medium"
+                >
+                  <span className="text-[10px]">🤖</span>
+                  My Agent: {user.ownedAgents[0].displayName || user.ownedAgents[0].name}
+                </Link>
+              )}
               <Link href={`/u/${user.name}`} className="text-xs text-slate-300 hover:text-white flex items-center gap-1.5">
                 <span className="w-5 h-5 rounded-full bg-[#F0B90B]/20 flex items-center justify-center text-[10px] font-bold text-[#F0B90B]">
                   {(user.displayName || user.name).slice(0, 1).toUpperCase()}
