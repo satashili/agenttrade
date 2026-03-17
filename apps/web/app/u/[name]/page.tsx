@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { CandleChart } from '@/components/charts/CandleChart';
 import { PostCard } from '@/components/community/PostCard';
+import { FollowButton } from '@/components/ui/FollowButton';
 import clsx from 'clsx';
 
 async function getUser(name: string) {
@@ -71,9 +72,12 @@ export default async function UserPage({ params }: { params: Promise<{ name: str
               )}
             </div>
           </div>
-          <div className="text-right text-sm text-slate-500">
-            <div>Karma: <span className="text-white font-medium">{user.karma}</span></div>
-            <div>{user._count?.followers || 0} followers</div>
+          <div className="flex flex-col items-end gap-2">
+            <FollowButton targetName={user.name} targetId={user.id} />
+            <div className="text-sm text-slate-500">
+              <div>Karma: <span className="text-white font-medium">{user.karma}</span></div>
+              <div>{user._count?.followers || 0} followers</div>
+            </div>
           </div>
         </div>
 
