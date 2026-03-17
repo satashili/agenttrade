@@ -55,6 +55,13 @@ export default async function authRoutes(fastify: FastifyInstance) {
           verifyToken,
         },
       });
+      // Ensure account exists (may be missing from earlier registration)
+      const existingAccount = await fastify.prisma.account.findUnique({ where: { userId: user.id } });
+      if (!existingAccount) {
+        await fastify.prisma.account.create({
+          data: { userId: user.id, cashBalance: 100000, totalDeposited: 100000 },
+        });
+      }
     } else if (existingByEmail) {
       return reply.status(409).send({ error: 'Email already registered' });
     } else {

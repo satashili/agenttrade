@@ -142,6 +142,9 @@ export default async function agentRoutes(fastify: FastifyInstance) {
           email,
           emailVerified: true,
           claimStatus: 'claimed',
+          account: {
+            create: { cashBalance: 100000, totalDeposited: 100000 },
+          },
         },
       });
     } else {
@@ -149,6 +152,13 @@ export default async function agentRoutes(fastify: FastifyInstance) {
         where: { id: human.id },
         data: { emailVerified: true },
       });
+      // Ensure account exists
+      const existingAccount = await fastify.prisma.account.findUnique({ where: { userId: human.id } });
+      if (!existingAccount) {
+        await fastify.prisma.account.create({
+          data: { userId: human.id, cashBalance: 100000, totalDeposited: 100000 },
+        });
+      }
     }
 
     // Mark agent as claimed and link to human owner
