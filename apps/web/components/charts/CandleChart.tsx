@@ -47,8 +47,8 @@ export function CandleChart({ symbol, height }: Props) {
         horzLines: { color: '#1c2230' },
       },
       crosshair: {
-        vertLine: { color: '#F0B90B40', style: 2, labelBackgroundColor: '#F0B90B' },
-        horzLine: { color: '#F0B90B40', style: 2, labelBackgroundColor: '#F0B90B' },
+        vertLine: { color: '#1E6FFF40', style: 2, labelBackgroundColor: '#1E6FFF' },
+        horzLine: { color: '#1E6FFF40', style: 2, labelBackgroundColor: '#1E6FFF' },
       },
       rightPriceScale: { borderColor: '#1c2230', scaleMargins: { top: 0.1, bottom: 0.25 } },
       timeScale: { borderColor: '#1c2230', timeVisible: true, secondsVisible: false },
@@ -139,7 +139,7 @@ export function CandleChart({ symbol, height }: Props) {
             onClick={() => setInterval_(iv)}
             className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
               interval === iv
-                ? 'bg-[#F0B90B]/20 text-[#F0B90B] font-semibold'
+                ? 'bg-[#1E6FFF]/20 text-[#1E6FFF] font-semibold'
                 : 'text-slate-500 hover:text-slate-300 hover:bg-[#1c2230]'
             }`}
           >

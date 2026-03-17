@@ -51,7 +51,7 @@ export function StatusBar() {
       <div className="flex-1" />
       {token && user && pnl && (
         <div className="flex items-center gap-3">
-          <span className="text-[#F0B90B] font-medium">{user.displayName || user.name}</span>
+          <span className="text-[#1E6FFF] font-medium">{user.displayName || user.name}</span>
           <span className="text-slate-500">Equity <span className="text-slate-200 tabular-nums">${fmt(pnl.totalValue)}</span></span>
           <span className={`tabular-nums font-medium ${pnl.totalPnlPct >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
             {pnl.totalPnlPct >= 0 ? '+' : ''}{pnl.totalPnlPct.toFixed(2)}%

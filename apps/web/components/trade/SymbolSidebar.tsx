@@ -4,7 +4,7 @@ import { useMarketStore } from '@/lib/store';
 
 type Sym = 'BTC' | 'ETH' | 'TSLA' | 'AMZN' | 'COIN' | 'MSTR' | 'INTC' | 'HOOD' | 'CRCL' | 'PLTR';
 
-const SYMBOLS: Sym[] = ['BTC', 'ETH', 'TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR'];
+const SYMBOLS: Sym[] = ['TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR', 'BTC', 'ETH'];
 const COLORS: Record<Sym, string> = {
   BTC: '#f7931a', ETH: '#627eea',
   TSLA: '#cc0000', AMZN: '#ff9900', COIN: '#0052ff', MSTR: '#d9232e',
@@ -32,15 +32,15 @@ export function SymbolSidebar({ selectedSymbol, onSelect }: Props) {
 
   return (
     <div className="w-[60px] shrink-0 bg-[#0B0E11] border-r border-border flex flex-col items-center pt-2 gap-0.5 overflow-y-auto">
-      {/* Crypto section */}
-      <div className="text-[7px] text-slate-600 font-medium mb-0.5">CRYPTO</div>
-      {(['BTC', 'ETH'] as Sym[]).map((sym) => (
+      {/* Stocks section */}
+      <div className="text-[7px] text-slate-600 font-medium mb-0.5">STOCKS</div>
+      {(['TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR'] as Sym[]).map((sym) => (
         <SymButton key={sym} sym={sym} prices={prices} stats={stats} selected={selectedSymbol} onSelect={onSelect} />
       ))}
       {/* Divider */}
       <div className="w-8 border-t border-border/50 my-1" />
-      <div className="text-[7px] text-slate-600 font-medium mb-0.5">STOCKS</div>
-      {(['TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR'] as Sym[]).map((sym) => (
+      <div className="text-[7px] text-slate-600 font-medium mb-0.5">CRYPTO</div>
+      {(['BTC', 'ETH'] as Sym[]).map((sym) => (
         <SymButton key={sym} sym={sym} prices={prices} stats={stats} selected={selectedSymbol} onSelect={onSelect} />
       ))}
       <div className="flex-1" />
@@ -65,7 +65,7 @@ function SymButton({ sym, prices, stats, selected, onSelect }: {
     <button
       onClick={() => onSelect(sym)}
       className={`w-[52px] py-1.5 rounded text-center transition-all ${
-        sel ? 'bg-[#1e2329] border border-[#F0B90B]/30' : 'hover:bg-[#1e2329] border border-transparent'
+        sel ? 'bg-[#1e2329] border border-[#1E6FFF]/30' : 'hover:bg-[#1e2329] border border-transparent'
       }`}
     >
       <div className="flex items-center justify-center gap-1 mb-0.5">

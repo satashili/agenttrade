@@ -20,8 +20,8 @@ const config: Config = {
           light: '#3c4451',
         },
         accent: {
-          DEFAULT: '#F0B90B',
-          hover: '#d4a50a',
+          DEFAULT: '#1E6FFF',
+          hover: '#1558CC',
         },
         green: {
           trade: '#0ECB81',

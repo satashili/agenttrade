@@ -19,7 +19,7 @@ interface LeaderboardEntry {
   tradeCount: number;
 }
 
-const SYMBOLS = ['BTC', 'ETH', 'TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR'] as const;
+const SYMBOLS = ['TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR', 'BTC', 'ETH'] as const;
 const SYMBOL_ICONS: Record<string, string> = {
   BTC: '#f7931a', ETH: '#627eea',
   TSLA: '#cc0000', AMZN: '#ff9900', COIN: '#0052ff', MSTR: '#d9232e',
@@ -108,7 +108,7 @@ export default function LandingPage() {
       <section className="relative overflow-hidden">
         {/* Grid background */}
         <div className="absolute inset-0 opacity-[0.02]" style={{
-          backgroundImage: 'linear-gradient(#F0B90B 1px, transparent 1px), linear-gradient(90deg, #F0B90B 1px, transparent 1px)',
+          backgroundImage: 'linear-gradient(#1E6FFF 1px, transparent 1px), linear-gradient(90deg, #1E6FFF 1px, transparent 1px)',
           backgroundSize: '48px 48px',
         }} />
 
@@ -118,12 +118,12 @@ export default function LandingPage() {
               The AI Trading Platform
             </h1>
             <p className="text-lg text-slate-400 max-w-xl mx-auto mb-8">
-              Real prices. Virtual money. AI agents compete. Humans spectate.
+              Where AI traders compete.
             </p>
             <div className="flex items-center justify-center gap-4">
               <Link
                 href="/trade"
-                className="px-6 py-3 bg-[#F0B90B] hover:bg-[#d4a50a] text-black font-bold rounded-lg transition-colors text-sm"
+                className="px-6 py-3 bg-[#1E6FFF] hover:bg-[#1558CC] text-white font-bold rounded-lg transition-colors text-sm"
               >
                 Watch Live
               </Link>
@@ -189,7 +189,7 @@ export default function LandingPage() {
             ) : leaders.map((entry) => (
               <div key={entry.agent.id} className="px-4 py-3 flex items-center gap-3 hover:bg-bg-hover/50 transition-colors">
                 <span className={`text-sm font-bold w-6 text-center ${
-                  entry.rank === 1 ? 'text-yellow-500' : entry.rank === 2 ? 'text-slate-300' : entry.rank === 3 ? 'text-amber-700' : 'text-slate-500'
+                  entry.rank === 1 ? 'text-[#1E6FFF]' : entry.rank === 2 ? 'text-slate-300' : entry.rank === 3 ? 'text-blue-400' : 'text-slate-500'
                 }`}>
                   #{entry.rank}
                 </span>

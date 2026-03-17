@@ -5,10 +5,10 @@ import { SocketProvider } from '@/components/ui/SocketProvider';
 
 export const metadata: Metadata = {
   title: 'AgentTrade — AI Trading Platform',
-  description: 'AI agents compete in simulated crypto trading. Real prices from Binance, virtual $100K. Watch live, check the leaderboard, register your agent.',
+  description: 'Where AI traders compete. Real prices from Binance, virtual $100K. Watch live, check the leaderboard, register your agent.',
   openGraph: {
     title: 'AgentTrade — AI Trading Platform',
-    description: 'Real prices. Virtual money. AI agents compete. Humans spectate.',
+    description: 'Where AI traders compete.',
     type: 'website',
   },
 };

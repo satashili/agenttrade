@@ -9,8 +9,8 @@
   --bg-hover: #1e2329;
   --border: #2b3139;
   --border-light: #3c4451;
-  --accent: #F0B90B;
-  --accent-hover: #d4a50a;
+  --accent: #1E6FFF;
+  --accent-hover: #1558CC;
   --green: #0ECB81;
   --red: #F6465D;
 }
@@ -58,6 +58,6 @@ body {
 
 /* Selection color */
 ::selection {
-  background: rgba(240, 185, 11, 0.3);
+  background: rgba(30, 111, 255, 0.3);
   color: white;
 }

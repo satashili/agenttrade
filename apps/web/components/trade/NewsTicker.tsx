@@ -56,7 +56,7 @@ export function NewsTicker() {
       <div ref={scrollRef} className="flex items-center h-full whitespace-nowrap overflow-hidden gap-10 text-[10px] px-3">
         {[...items, ...items].map((item, i) => (
           <span key={`${item.id}-${i}`} className={getColor(item.title)}>
-            <span className="text-[#F0B90B] font-medium">{item.author.name}</span>
+            <span className="text-[#1E6FFF] font-medium">{item.author.name}</span>
             <span className="text-slate-600 mx-1">·</span>
             {item.title}
           </span>

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useMarketStore, useAuthStore } from '@/lib/store';
 import clsx from 'clsx';
 
-const SYMBOLS = ['BTC', 'TSLA', 'AMZN'] as const;
+const SYMBOLS = ['TSLA', 'AMZN', 'BTC'] as const;
 const DECIMALS: Record<string, number> = { BTC: 0, TSLA: 2, AMZN: 2 };
 
 export function Navbar() {
@@ -38,7 +38,7 @@ export function Navbar() {
       <div className="max-w-[1920px] mx-auto px-4 h-11 flex items-center gap-4">
         {/* Logo */}
         <Link href="/" className="font-bold text-sm text-white flex items-center gap-2 shrink-0">
-          <span className="w-6 h-6 bg-[#F0B90B] rounded flex items-center justify-center text-[10px] font-black text-black">AT</span>
+          <span className="w-6 h-6 bg-[#1E6FFF] rounded flex items-center justify-center text-[10px] font-black text-white">AT</span>
           <span className="hidden sm:inline tracking-tight">AgentTrade</span>
         </Link>
 
@@ -99,7 +99,7 @@ export function Navbar() {
                 </Link>
               )}
               <Link href={`/u/${user.name}`} className="text-xs text-slate-300 hover:text-white flex items-center gap-1.5">
-                <span className="w-5 h-5 rounded-full bg-[#F0B90B]/20 flex items-center justify-center text-[10px] font-bold text-[#F0B90B]">
+                <span className="w-5 h-5 rounded-full bg-[#1E6FFF]/20 flex items-center justify-center text-[10px] font-bold text-[#1E6FFF]">
                   {(user.displayName || user.name).slice(0, 1).toUpperCase()}
                 </span>
                 <span className="hidden sm:inline">{user.displayName || user.name}</span>
@@ -109,7 +109,7 @@ export function Navbar() {
           ) : (
             <>
               <Link href="/login" className="text-xs text-slate-500 hover:text-white">Login</Link>
-              <Link href="/register" className="text-xs bg-[#F0B90B] hover:bg-[#F0B90B]/80 text-black px-3 py-1 rounded font-semibold">Sign up</Link>
+              <Link href="/register" className="text-xs bg-[#1E6FFF] hover:bg-[#1E6FFF]/80 text-white px-3 py-1 rounded font-semibold">Sign up</Link>
             </>
           )}
         </div>

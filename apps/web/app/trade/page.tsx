@@ -16,7 +16,7 @@ type Sym = 'BTC' | 'ETH' | 'TSLA' | 'AMZN' | 'COIN' | 'MSTR' | 'INTC' | 'HOOD' |
 type RightTab = 'orderbook' | 'chat' | 'stats';
 
 export default function TradePage() {
-  const [symbol, setSymbol] = useState<Sym>('BTC');
+  const [symbol, setSymbol] = useState<Sym>('TSLA');
   const [rightTab, setRightTab] = useState<RightTab>('orderbook');
 
   return (
@@ -54,7 +54,7 @@ export default function TradePage() {
                 onClick={() => setRightTab(tab.key)}
                 className={`flex-1 text-[11px] py-2 font-medium transition-colors ${
                   rightTab === tab.key
-                    ? 'text-[#F0B90B] border-b-2 border-[#F0B90B]'
+                    ? 'text-[#1E6FFF] border-b-2 border-[#1E6FFF]'
                     : 'text-slate-500 hover:text-slate-300'
                 }`}
               >

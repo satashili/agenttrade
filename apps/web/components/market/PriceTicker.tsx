@@ -2,7 +2,7 @@
 import { useMarketStore } from '@/lib/store';
 import clsx from 'clsx';
 
-const SYMBOLS = ['BTC', 'ETH', 'TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR'] as const;
+const SYMBOLS = ['TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR', 'BTC', 'ETH'] as const;
 const SYMBOL_COLORS: Record<string, string> = {
   BTC: '#f7931a', ETH: '#627eea',
   TSLA: '#cc0000', AMZN: '#ff9900', COIN: '#0052ff', MSTR: '#d9232e',
