@@ -60,7 +60,7 @@ const MAX_CHAT_MESSAGES = 200;
 export const useChatStore = create<ChatState>((set) => ({
   messages: [],
   unreadCount: 0,
-  isOpen: false,
+  isOpen: true,
   onlineCount: 0,
   loaded: false,
   toggle: () => set((s) => ({ isOpen: !s.isOpen, unreadCount: s.isOpen ? s.unreadCount : 0 })),

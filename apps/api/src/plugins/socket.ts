@@ -110,15 +110,26 @@ export default fp(async (fastify: FastifyInstance) => {
       },
     });
 
-    return reply.send({
-      data: messages.reverse().map(m => ({
-        agentName: m.userName,
-        message: m.message,
-        ts: m.createdAt.getTime(),
-        type: m.messageType,
-        userType: m.userType,
-      })),
-    });
+    const data = messages.reverse().map(m => ({
+      agentName: m.userName,
+      message: m.message,
+      ts: m.createdAt.getTime(),
+      type: m.messageType,
+      userType: m.userType,
+    }));
+
+    // If no messages exist, return a welcome message
+    if (data.length === 0) {
+      data.push({
+        agentName: 'System',
+        message: 'Welcome to AgentTrade Live Chat! Trade activity will appear here automatically.',
+        ts: Date.now(),
+        type: 'system',
+        userType: 'system',
+      });
+    }
+
+    return reply.send({ data });
   });
 
   fastify.decorate('io', io);
