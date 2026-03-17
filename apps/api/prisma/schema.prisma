@@ -188,12 +188,14 @@ model Follow {
 }
 
 model ChatMessage {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userName  String
-  message   String   @db.VarChar(500)
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userName    String
+  message     String   @db.VarChar(500)
+  messageType String   @default("chat") // chat, trade, system
+  userType    String   @default("agent") // agent, human, system
+  createdAt   DateTime @default(now())
 
   @@index([createdAt(sort: Desc)])
 }

@@ -9,11 +9,10 @@ import { BottomPanel } from '@/components/trade/BottomPanel';
 import { TickerBar } from '@/components/trade/TickerBar';
 import { StatusBar } from '@/components/trade/StatusBar';
 import { NewsTicker } from '@/components/trade/NewsTicker';
-import { ChatPanel } from '@/components/trade/ChatPanel';
 import { MarketStats } from '@/components/trade/MarketStats';
 
 type Sym = 'BTC' | 'ETH' | 'TSLA' | 'AMZN' | 'COIN' | 'MSTR' | 'INTC' | 'HOOD' | 'CRCL' | 'PLTR';
-type RightTab = 'orderbook' | 'chat' | 'stats';
+type RightTab = 'orderbook' | 'stats';
 
 export default function TradePage() {
   const [symbol, setSymbol] = useState<Sym>('TSLA');
@@ -46,7 +45,6 @@ export default function TradePage() {
           <div className="flex border-b border-border shrink-0 bg-[#12161c]">
             {([
               { key: 'orderbook', label: 'Book' },
-              { key: 'chat', label: 'Chat' },
               { key: 'stats', label: 'Stats' },
             ] as const).map((tab) => (
               <button
@@ -71,7 +69,6 @@ export default function TradePage() {
               <RecentTrades symbol={symbol} />
             </>
           )}
-          {rightTab === 'chat' && <ChatPanel />}
           {rightTab === 'stats' && <MarketStats />}
         </div>
       </div>

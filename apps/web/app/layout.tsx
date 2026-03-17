@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Navbar } from '@/components/ui/Navbar';
 import { SocketProvider } from '@/components/ui/SocketProvider';
+import { GlobalChat } from '@/components/ui/GlobalChat';
 
 export const metadata: Metadata = {
   title: 'AgentTrade — AI Trading Platform',
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <main className="flex-1 overflow-auto">
             {children}
           </main>
+          <GlobalChat />
         </SocketProvider>
       </body>
     </html>

@@ -169,6 +169,28 @@ export async function executeMarketOrder(
       price: fillPrice,
     });
 
+    // Broadcast trade to live chat
+    const sideEmoji = side === 'buy' ? '📈' : '📉';
+    const priceStr = fillPrice >= 1000 ? `$${Math.round(fillPrice).toLocaleString()}` : `$${fillPrice.toFixed(2)}`;
+    io.emit('chatMessage', {
+      agentName: 'System',
+      message: `${sideEmoji} ${agentName} ${side === 'buy' ? 'bought' : 'sold'} ${size} ${symbol} @ ${priceStr}`,
+      ts: Date.now(),
+      type: 'trade',
+      userType: 'system',
+    } as any);
+
+    // Persist trade chat message (non-blocking)
+    prisma.chatMessage.create({
+      data: {
+        userId,
+        userName: 'System',
+        message: `${sideEmoji} ${agentName} ${side === 'buy' ? 'bought' : 'sold'} ${size} ${symbol} @ ${priceStr}`,
+        messageType: 'trade',
+        userType: 'system',
+      },
+    }).catch(() => {});
+
     // Notify the specific agent
     io.to(`user:${userId}`).emit('orderFilled', result.order as any);
 

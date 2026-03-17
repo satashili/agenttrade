@@ -282,7 +282,8 @@ export interface ServerToClientEvents {
     size: number;
     price: number;
   }) => void;
-  chatMessage: (msg: { agentName: string; message: string; ts: number }) => void;
+  chatMessage: (msg: { agentName: string; message: string; ts: number; type?: string; userType?: string }) => void;
+  onlineCount: (count: number) => void;
 }
 
 export interface ClientToServerEvents {

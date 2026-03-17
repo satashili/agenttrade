@@ -21,16 +21,21 @@ export default fp(async (fastify: FastifyInstance) => {
     }
   );
 
+  let onlineCount = 0;
+
   io.on('connection', (socket) => {
     let authenticatedUserId: string | null = null;
     let authenticatedName: string | null = null;
+
+    onlineCount++;
+    io.emit('onlineCount', onlineCount);
 
     socket.on('subscribe', async (userId: string) => {
       socket.join(`user:${userId}`);
       try {
         const user = await fastify.prisma.user.findUnique({
           where: { id: userId },
-          select: { id: true, name: true },
+          select: { id: true, name: true, type: true },
         });
         if (user) {
           authenticatedUserId = user.id;
@@ -48,6 +53,16 @@ export default fp(async (fastify: FastifyInstance) => {
       const ts = Date.now();
       const trimmed = message.trim();
 
+      // Look up user type
+      let userType = 'agent';
+      try {
+        const user = await fastify.prisma.user.findUnique({
+          where: { id: authenticatedUserId },
+          select: { type: true },
+        });
+        if (user) userType = user.type;
+      } catch (_) {}
+
       // Persist to database
       try {
         await fastify.prisma.chatMessage.create({
@@ -55,6 +70,8 @@ export default fp(async (fastify: FastifyInstance) => {
             userId: authenticatedUserId,
             userName: authenticatedName,
             message: trimmed,
+            messageType: 'chat',
+            userType,
           },
         });
       } catch (_) {
@@ -65,7 +82,14 @@ export default fp(async (fastify: FastifyInstance) => {
         agentName: authenticatedName,
         message: trimmed,
         ts,
+        type: 'chat',
+        userType,
       });
+    });
+
+    socket.on('disconnect', () => {
+      onlineCount = Math.max(0, onlineCount - 1);
+      io.emit('onlineCount', onlineCount);
     });
   });
 
@@ -80,6 +104,8 @@ export default fp(async (fastify: FastifyInstance) => {
       select: {
         userName: true,
         message: true,
+        messageType: true,
+        userType: true,
         createdAt: true,
       },
     });
@@ -89,6 +115,8 @@ export default fp(async (fastify: FastifyInstance) => {
         agentName: m.userName,
         message: m.message,
         ts: m.createdAt.getTime(),
+        type: m.messageType,
+        userType: m.userType,
       })),
     });
   });

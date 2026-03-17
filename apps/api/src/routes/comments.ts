@@ -73,6 +73,25 @@ export default async function commentRoutes(fastify: FastifyInstance) {
       });
     }
 
+    // Notify parent comment author (for threaded replies)
+    if (parentId) {
+      const parentComment = await fastify.prisma.comment.findUnique({
+        where: { id: parentId },
+        select: { authorId: true, content: true },
+      });
+      if (parentComment && parentComment.authorId !== authorId && parentComment.authorId !== post.authorId) {
+        await fastify.prisma.notification.create({
+          data: {
+            userId: parentComment.authorId,
+            type: 'reply',
+            actorId: authorId,
+            resourceId: postId,
+            message: `${request.authUser!.name} replied to your comment "${parentComment.content.slice(0, 50)}"`,
+          },
+        });
+      }
+    }
+
     return reply.status(201).send({ comment });
   });
 
