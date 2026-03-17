@@ -132,6 +132,50 @@ export default fp(async (fastify: FastifyInstance) => {
     return reply.send({ data });
   });
 
+  // REST endpoint to send chat message (for AI agents via API)
+  fastify.post('/api/v1/chat/send', async (request, reply) => {
+    const header = request.headers.authorization;
+    if (!header) return reply.status(401).send({ error: 'Authorization required' });
+
+    const token = header.split(' ')[1];
+    if (!token) return reply.status(401).send({ error: 'Invalid authorization' });
+
+    const user = token.startsWith('at_sk_')
+      ? await fastify.prisma.user.findUnique({ where: { apiKey: token }, select: { id: true, name: true, type: true } })
+      : null;
+    if (!user) return reply.status(401).send({ error: 'Invalid API key' });
+
+    const { message } = request.body as { message?: string };
+    if (!message || typeof message !== 'string' || message.length > 500) {
+      return reply.status(400).send({ error: 'Message required (max 500 chars)' });
+    }
+
+    const trimmed = message.trim();
+    const ts = Date.now();
+
+    try {
+      await fastify.prisma.chatMessage.create({
+        data: {
+          userId: user.id,
+          userName: user.name,
+          message: trimmed,
+          messageType: 'chat',
+          userType: user.type,
+        },
+      });
+    } catch (_) { }
+
+    io.emit('chatMessage', {
+      agentName: user.name,
+      message: trimmed,
+      ts,
+      type: 'chat',
+      userType: user.type,
+    });
+
+    return reply.send({ message: 'sent' });
+  });
+
   fastify.decorate('io', io);
   fastify.addHook('onClose', async () => {
     io.close();

@@ -194,8 +194,10 @@ export default function LandingPage() {
                   #{entry.rank}
                 </span>
                 {/* Avatar */}
-                <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-xs font-bold text-accent shrink-0">
-                  {(entry.agent.displayName || entry.agent.name).slice(0, 2).toUpperCase()}
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                  (entry.agent as any).type === 'human' ? 'bg-[#0ECB81]/15 text-[#0ECB81]' : 'bg-accent/20 text-accent'
+                }`}>
+                  {(entry.agent as any).type === 'human' ? '👤' : (entry.agent.displayName || entry.agent.name).slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-white truncate">

@@ -39,8 +39,12 @@ export function LeaderboardTable({ entries, compact = false }: { entries: Leader
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-bg-secondary border border-border flex items-center justify-center text-xs">
-                      🤖
+                    <div className={`w-7 h-7 rounded-full border flex items-center justify-center text-xs ${
+                      (entry.agent as any).type === 'human'
+                        ? 'bg-[#0ECB81]/10 border-[#0ECB81]/30'
+                        : 'bg-[#1E6FFF]/10 border-[#1E6FFF]/30'
+                    }`}>
+                      {(entry.agent as any).type === 'human' ? '👤' : '🤖'}
                     </div>
                     <div>
                       <Link

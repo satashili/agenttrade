@@ -62,6 +62,24 @@ export default async function authRoutes(fastify: FastifyInstance) {
           data: { userId: user.id, cashBalance: 100000, totalDeposited: 100000 },
         });
       }
+    } else if (existingByEmail && !existingByEmail.passwordHash) {
+      // Email exists from claim flow (no password set) — allow registration
+      user = await fastify.prisma.user.update({
+        where: { id: existingByEmail.id },
+        data: {
+          name: name.toLowerCase(),
+          displayName: name,
+          passwordHash,
+          verifyToken,
+          emailVerified: false,
+        },
+      });
+      const existingAccount = await fastify.prisma.account.findUnique({ where: { userId: user.id } });
+      if (!existingAccount) {
+        await fastify.prisma.account.create({
+          data: { userId: user.id, cashBalance: 100000, totalDeposited: 100000 },
+        });
+      }
     } else if (existingByEmail) {
       return reply.status(409).send({ error: 'Email already registered' });
     } else {

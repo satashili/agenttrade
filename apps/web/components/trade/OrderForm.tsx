@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useMarketStore, useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
 
@@ -18,6 +18,26 @@ function fmtPrice(p: number, sym: Sym) {
   return p.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
+function fmtUsd(n: number) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+interface PositionInfo {
+  size: number;
+  avgCost: number;
+  side: string;
+  unrealizedPnl: number;
+  unrealizedPnlPct: number;
+  marginUsed: number;
+}
+
+interface LeverageInfo {
+  maxLeverage: number;
+  totalMarginUsed: number;
+  availableMargin: number;
+  currentLeverage: number;
+}
+
 export function OrderForm({ symbol }: Props) {
   const [side,    setSide]    = useState<Side>('buy');
   const [otype,   setOtype]   = useState<OType>('market');
@@ -26,6 +46,10 @@ export function OrderForm({ symbol }: Props) {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
   const [success, setSuccess] = useState('');
+  const [position, setPosition] = useState<PositionInfo | null>(null);
+  const [leverage, setLeverage] = useState<LeverageInfo | null>(null);
+  const [cashBalance, setCashBalance] = useState<number>(0);
+  const [closeResult, setCloseResult] = useState<{ pnl: number; symbol: string } | null>(null);
 
   const { prices }      = useMarketStore();
   const { token, user } = useAuthStore();
@@ -35,22 +59,59 @@ export function OrderForm({ symbol }: Props) {
   const sizeNum   = parseFloat(size) || 0;
   const total     = sizeNum && execPrice ? sizeNum * execPrice : null;
 
+  // Fetch portfolio for current position & leverage info
+  const fetchPortfolio = useCallback(async () => {
+    if (!token) return;
+    try {
+      const p: any = await api.get('/api/v1/portfolio');
+      setCashBalance(p.cashBalance || 0);
+      setLeverage(p.leverage || null);
+      const pos = p.positions?.[symbol];
+      setPosition(pos && pos.size !== 0 ? pos : null);
+    } catch { }
+  }, [token, symbol]);
+
+  useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError(''); setSuccess('');
+    setError(''); setSuccess(''); setCloseResult(null);
     if (!sizeNum) return;
 
     setLoading(true);
     try {
       const body: Record<string, unknown> = { symbol, side, type: otype, size: sizeNum };
-      if (otype === 'limit') body.price     = parseFloat(price);
-      if (otype === 'stop')  body.stopPrice = parseFloat(price);
+      if (otype === 'limit' || otype === 'stop') body.price = parseFloat(price);
       await api.post('/api/v1/orders', body);
-      setSuccess(`${side === 'buy' ? 'Buy' : 'Sell'} order submitted!`);
+      setSuccess(`${side === 'buy' ? 'Buy' : 'Sell'} ${sizeNum} ${symbol} filled`);
       setSize(''); setPrice('');
-      setTimeout(() => setSuccess(''), 3000);
+      setTimeout(() => setSuccess(''), 4000);
+      fetchPortfolio();
     } catch (err: any) {
       setError(err.message || 'Failed to place order');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function closePosition() {
+    if (!position) return;
+    setLoading(true);
+    setError(''); setSuccess(''); setCloseResult(null);
+    try {
+      const result: any = await api.post('/api/v1/orders/close-position', { symbol });
+      const fillPrice = result?.order?.fillPrice || 0;
+      const closedSize = Math.abs(position.size);
+      const pnl = position.side === 'long'
+        ? closedSize * (fillPrice - position.avgCost)
+        : closedSize * (position.avgCost - fillPrice);
+      const fee = closedSize * fillPrice * 0.001;
+      setCloseResult({ pnl: pnl - fee, symbol });
+      setSuccess(`Closed ${symbol} position`);
+      setTimeout(() => { setSuccess(''); setCloseResult(null); }, 6000);
+      fetchPortfolio();
+    } catch (err: any) {
+      setError(err.message || 'Failed to close position');
     } finally {
       setLoading(false);
     }
@@ -62,20 +123,20 @@ export function OrderForm({ symbol }: Props) {
       <div className="grid grid-cols-2 text-xs font-semibold">
         <button
           onClick={() => setSide('buy')}
-          className={`py-2 transition-colors ${
+          className={`py-2.5 transition-colors ${
             side === 'buy'
               ? 'text-[#0ECB81] border-b-2 border-[#0ECB81] bg-[#0ECB81]/5'
               : 'text-slate-500 hover:text-slate-300 border-b border-border'
           }`}
-        >Buy</button>
+        >Long / Buy</button>
         <button
           onClick={() => setSide('sell')}
-          className={`py-2 transition-colors ${
+          className={`py-2.5 transition-colors ${
             side === 'sell'
               ? 'text-[#F6465D] border-b-2 border-[#F6465D] bg-[#F6465D]/5'
               : 'text-slate-500 hover:text-slate-300 border-b border-border'
           }`}
-        >Sell</button>
+        >Short / Sell</button>
       </div>
 
       <div className="p-3 space-y-2.5">
@@ -85,7 +146,7 @@ export function OrderForm({ symbol }: Props) {
             <button
               key={t}
               onClick={() => setOtype(t)}
-              className={`flex-1 py-1 text-xs rounded transition-colors capitalize ${
+              className={`flex-1 py-1.5 text-xs rounded transition-colors capitalize ${
                 otype === t ? 'bg-bg-hover text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
               }`}
             >{t}</button>
@@ -93,85 +154,126 @@ export function OrderForm({ symbol }: Props) {
         </div>
 
         {!token ? (
-          <div className="text-center py-5 space-y-2">
+          <div className="text-center py-6 space-y-2">
             <p className="text-slate-500 text-xs">Login to trade</p>
             <a
               href="/login"
-              className="inline-block text-xs bg-accent hover:bg-accent-hover text-white px-4 py-1.5 rounded transition-colors"
+              className="inline-block text-xs bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded transition-colors"
             >Login</a>
           </div>
         ) : (
-          <form onSubmit={submit} className="space-y-2">
-            {/* User identity */}
-            <div className="flex justify-between text-[10px] text-slate-500">
-              <span>Avail.</span>
-              <span className="text-slate-400 flex items-center gap-1">
-                {user?.type === 'human' ? '👤' : '🤖'}
-                {user?.displayName ?? user?.name ?? 'Trader'}
-              </span>
-            </div>
+          <>
+            <form onSubmit={submit} className="space-y-2.5">
+              {/* Balance & leverage */}
+              <div className="flex justify-between text-[10px] text-slate-500">
+                <span>Balance: <span className="text-slate-300 tabular-nums">${fmtUsd(cashBalance)}</span></span>
+                {leverage && (
+                  <span>Leverage: <span className="text-slate-300 tabular-nums">{leverage.currentLeverage}x</span> / {leverage.maxLeverage}x</span>
+                )}
+              </div>
 
-            {/* Price input for limit / stop */}
-            {otype !== 'market' && (
+              {/* Price input for limit / stop */}
+              {otype !== 'market' && (
+                <div>
+                  <label className="text-[10px] text-slate-500 block mb-1">
+                    {otype === 'stop' ? 'Stop Price' : 'Price'} (USDT)
+                  </label>
+                  <input
+                    type="number" value={price}
+                    onChange={e => setPrice(e.target.value)}
+                    placeholder={currentPrice ? fmtPrice(currentPrice, symbol) : '0'}
+                    className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-accent tabular-nums"
+                    step="any" min="0"
+                  />
+                </div>
+              )}
+
+              {/* Market price hint */}
+              {otype === 'market' && (
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-500">Market Price</span>
+                  <span className="text-white tabular-nums font-medium">${fmtPrice(currentPrice, symbol)}</span>
+                </div>
+              )}
+
+              {/* Size */}
               <div>
-                <label className="text-[10px] text-slate-500 block mb-1">
-                  {otype === 'stop' ? 'Stop Price' : 'Price'} (USDT)
-                </label>
+                <label className="text-[10px] text-slate-500 block mb-1">Amount ({symbol})</label>
                 <input
-                  type="number" value={price}
-                  onChange={e => setPrice(e.target.value)}
-                  placeholder={currentPrice ? fmtPrice(currentPrice, symbol) : '0'}
-                  className="w-full bg-bg-secondary border border-border rounded px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-accent tabular-nums"
+                  type="number" value={size}
+                  onChange={e => setSize(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-accent tabular-nums"
                   step="any" min="0"
                 />
               </div>
-            )}
 
-            {/* Market price hint */}
-            {otype === 'market' && (
-              <div className="flex justify-between text-[10px]">
-                <span className="text-slate-500">Market Price</span>
-                <span className="text-slate-300 tabular-nums">≈ ${fmtPrice(currentPrice, symbol)}</span>
+              {/* Total */}
+              {total !== null && (
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-500">Total</span>
+                  <span className="text-slate-300 tabular-nums">${fmtUsd(total)}</span>
+                </div>
+              )}
+
+              {/* Margin required */}
+              {total !== null && (
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-500">Margin (5x)</span>
+                  <span className="text-slate-300 tabular-nums">${fmtUsd(total / 5)}</span>
+                </div>
+              )}
+
+              {error   && <p className="text-[11px] text-red-trade">{error}</p>}
+              {success && <p className="text-[11px] text-green-trade">{success}</p>}
+              {closeResult && (
+                <div className={`text-[11px] font-medium ${closeResult.pnl >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
+                  Realized P&L: {closeResult.pnl >= 0 ? '+' : ''}${fmtUsd(closeResult.pnl)}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading || !sizeNum || (otype !== 'market' && !parseFloat(price))}
+                className={`w-full py-2.5 rounded text-sm font-bold transition-colors disabled:opacity-30 ${
+                  side === 'buy'
+                    ? 'bg-[#0ECB81] hover:bg-[#0ECB81]/80 text-black'
+                    : 'bg-[#F6465D] hover:bg-[#F6465D]/80 text-white'
+                }`}
+              >
+                {loading ? 'Submitting…' : `${side === 'buy' ? 'Buy' : 'Sell'} ${symbol}`}
+              </button>
+            </form>
+
+            {/* Current position & close button */}
+            {position && (
+              <div className="mt-2 p-2.5 rounded bg-bg-secondary border border-border/50 space-y-1.5">
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-500">Position</span>
+                  <span className={`font-medium ${position.side === 'long' ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
+                    {position.side === 'long' ? '▲ LONG' : '▼ SHORT'} {Math.abs(position.size)} {symbol}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-500">Entry</span>
+                  <span className="text-slate-300 tabular-nums">${fmtPrice(position.avgCost, symbol)}</span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-500">Unrealized P&L</span>
+                  <span className={`tabular-nums font-medium ${position.unrealizedPnl >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
+                    {position.unrealizedPnl >= 0 ? '+' : ''}${fmtUsd(position.unrealizedPnl)} ({position.unrealizedPnlPct >= 0 ? '+' : ''}{position.unrealizedPnlPct.toFixed(2)}%)
+                  </span>
+                </div>
+                <button
+                  onClick={closePosition}
+                  disabled={loading}
+                  className="w-full py-1.5 rounded text-xs font-bold bg-slate-700 hover:bg-slate-600 text-white transition-colors disabled:opacity-30 mt-1"
+                >
+                  {loading ? 'Closing…' : `Close ${symbol} Position`}
+                </button>
               </div>
             )}
-
-            {/* Size */}
-            <div>
-              <label className="text-[10px] text-slate-500 block mb-1">Amount ({symbol})</label>
-              <input
-                type="number" value={size}
-                onChange={e => setSize(e.target.value)}
-                placeholder="0.00"
-                className="w-full bg-bg-secondary border border-border rounded px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-accent tabular-nums"
-                step="any" min="0"
-              />
-            </div>
-
-            {/* Total */}
-            {total !== null && (
-              <div className="flex justify-between text-[10px]">
-                <span className="text-slate-500">Total</span>
-                <span className="text-slate-300 tabular-nums">
-                  ≈ ${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            )}
-
-            {error   && <p className="text-[11px] text-red-trade">{error}</p>}
-            {success && <p className="text-[11px] text-green-trade">{success}</p>}
-
-            <button
-              type="submit"
-              disabled={loading || !sizeNum || (otype !== 'market' && !parseFloat(price))}
-              className={`w-full py-2 rounded text-xs font-bold transition-colors disabled:opacity-30 ${
-                side === 'buy'
-                  ? 'bg-[#0ECB81] hover:bg-[#0ECB81]/80 text-black'
-                  : 'bg-[#F6465D] hover:bg-[#F6465D]/80 text-white'
-              }`}
-            >
-              {loading ? 'Submitting…' : `${side === 'buy' ? 'Buy' : 'Sell'} ${symbol}`}
-            </button>
-          </form>
+          </>
         )}
       </div>
     </div>
