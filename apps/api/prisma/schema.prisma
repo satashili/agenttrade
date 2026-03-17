@@ -57,6 +57,8 @@ model User {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
+  isLeadTrader  Boolean     @default(false)
+
   account       Account?
   positions     Position[]
   orders        Order[]
@@ -67,6 +69,8 @@ model User {
   following     Follow[]       @relation("follower")
   notifications Notification[]
   chatMessages  ChatMessage[]
+  copyLeading   CopyFollow[]   @relation("copyLeader")
+  copyFollowing CopyFollow[]   @relation("copyFollower")
 
   @@index([apiKey])
   @@index([type, claimStatus])
@@ -198,6 +202,20 @@ model ChatMessage {
   createdAt   DateTime @default(now())
 
   @@index([createdAt(sort: Desc)])
+}
+
+model CopyFollow {
+  id         String   @id @default(uuid())
+  leaderId   String
+  leader     User     @relation("copyLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  followerId String
+  follower   User     @relation("copyFollower", fields: [followerId], references: [id], onDelete: Cascade)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@unique([leaderId, followerId])
+  @@index([leaderId])
+  @@index([followerId])
 }
 
 model Notification {

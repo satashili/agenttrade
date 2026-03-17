@@ -1,5 +1,5 @@
 import { PrismaClient, Prisma } from '@prisma/client';
-import { Server as SocketServer } from 'socket.io';
+import { Server as SocketServer, Server } from 'socket.io';
 
 const FEE_RATE = 0.001; // 0.1%
 const MAX_LEVERAGE = 5;
@@ -214,6 +214,9 @@ export async function executeMarketOrder(
       // Non-critical: don't fail the trade if post creation fails
     }
 
+    // Copy trading: replicate to followers (non-blocking)
+    replicateToCopiers(prisma, io, userId, agentName, symbol, side, size, fillPrice).catch(() => {});
+
     // Build portfolio summary
     const cashBalance = parseFloat(result.account!.cashBalance.toString());
 
@@ -362,6 +365,108 @@ function serializeOrder(order: any) {
     createdAt: order.createdAt.toISOString(),
     filledAt: order.filledAt?.toISOString() || null,
   };
+}
+
+/**
+ * Replicate a leader's trade to all active copy followers.
+ * Each copier gets proportional sizing based on their equity vs leader's equity.
+ */
+async function replicateToCopiers(
+  prisma: PrismaClient,
+  io: Server,
+  leaderId: string,
+  leaderName: string,
+  symbol: string,
+  side: 'buy' | 'sell',
+  leaderSize: number,
+  fillPrice: number
+) {
+  // Check if this user is a lead trader
+  const leader = await prisma.user.findUnique({
+    where: { id: leaderId },
+    select: { isLeadTrader: true },
+  });
+  if (!leader?.isLeadTrader) return;
+
+  // Get active copiers
+  const copiers = await prisma.copyFollow.findMany({
+    where: { leaderId, active: true },
+    select: {
+      follower: {
+        select: { id: true, name: true },
+      },
+    },
+  });
+  if (copiers.length === 0) return;
+
+  // Get leader's equity for proportional sizing
+  const { marketData } = await import('./binanceFeed.js');
+  const prices = marketData.getPrices();
+
+  const leaderAccount = await prisma.account.findUnique({ where: { userId: leaderId } });
+  if (!leaderAccount) return;
+  const leaderCash = parseFloat(leaderAccount.cashBalance.toString());
+  const leaderPositions = await prisma.position.findMany({ where: { userId: leaderId } });
+  let leaderEquity = leaderCash;
+  for (const p of leaderPositions) {
+    leaderEquity += parseFloat(p.size.toString()) * (prices[p.symbol] || 0);
+  }
+  if (leaderEquity <= 0) return;
+
+  const leaderTradeValue = leaderSize * fillPrice;
+  const leaderProportion = leaderTradeValue / leaderEquity; // e.g. 0.05 = 5% of equity
+
+  for (const copier of copiers) {
+    try {
+      // Get copier's equity
+      const copierAccount = await prisma.account.findUnique({ where: { userId: copier.follower.id } });
+      if (!copierAccount) continue;
+      const copierCash = parseFloat(copierAccount.cashBalance.toString());
+      const copierPositions = await prisma.position.findMany({ where: { userId: copier.follower.id } });
+      let copierEquity = copierCash;
+      for (const p of copierPositions) {
+        copierEquity += parseFloat(p.size.toString()) * (prices[p.symbol] || 0);
+      }
+      if (copierEquity <= 0) continue;
+
+      // Proportional size
+      const copierTradeValue = copierEquity * leaderProportion;
+      let copierSize = copierTradeValue / fillPrice;
+
+      // Round to reasonable precision
+      if (symbol === 'BTC') copierSize = parseFloat(copierSize.toFixed(5));
+      else if (symbol === 'ETH') copierSize = parseFloat(copierSize.toFixed(4));
+      else copierSize = parseFloat(copierSize.toFixed(2));
+
+      if (copierSize <= 0) continue;
+
+      // Execute the copy trade
+      const result = await executeMarketOrder(
+        prisma,
+        copier.follower.id,
+        symbol,
+        side,
+        copierSize,
+        fillPrice,
+        io,
+        copier.follower.name
+      );
+
+      if (result.success) {
+        // Notify copier
+        await prisma.notification.create({
+          data: {
+            userId: copier.follower.id,
+            type: 'copy_trade',
+            message: `Copy trade: ${side.toUpperCase()} ${copierSize} ${symbol} @ $${fillPrice} (following ${leaderName})`,
+          },
+        }).catch(() => {});
+      }
+    } catch (err) {
+      // Non-critical: don't fail the leader's trade
+      console.error(`[CopyTrade] Failed for copier ${copier.follower.name}:`, (err as Error).message);
+    }
+  }
 }
 
 export { MAX_LEVERAGE, marginRequired, calcEquity, calcTotalMarginUsed };
