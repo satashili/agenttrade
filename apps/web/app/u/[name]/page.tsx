@@ -140,12 +140,12 @@ export default async function UserPage({ params }: { params: Promise<{ name: str
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {Object.values(portfolio.positions).map((pos: any) => {
+                  {Object.entries(portfolio.positions).map(([symbol, pos]: [string, any]) => {
                     const pnl = pos.unrealizedPnl;
                     const isUp = pnl >= 0;
                     return (
-                      <tr key={pos.symbol} className="hover:bg-bg-hover transition-colors">
-                        <td className="px-4 py-3 font-medium text-white">{pos.symbol}</td>
+                      <tr key={symbol} className="hover:bg-bg-hover transition-colors">
+                        <td className="px-4 py-3 font-medium text-white">{symbol}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-slate-300">{pos.size.toFixed(4)}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-slate-400">${pos.avgCost.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-white">${pos.currentPrice?.toLocaleString()}</td>
