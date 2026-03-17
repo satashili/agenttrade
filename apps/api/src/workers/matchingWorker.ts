@@ -1,6 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Server as SocketServer } from 'socket.io';
 import { marketData } from '../services/binanceFeed.js';
+import { MAX_LEVERAGE } from '../services/trading.js';
 
 let lastPrices: Record<string, number> = {};
 let isRunning = false;
@@ -25,6 +26,7 @@ export function startMatchingWorker(prisma: PrismaClient, io: SocketServer) {
       lastPrices = { ...prices };
 
       await matchLimitOrders(prisma, io, prices);
+      await checkLiquidations(prisma, io, prices);
 
     } catch (err: any) {
       console.error('[MatchingWorker] Error:', err.message);
@@ -50,6 +52,8 @@ async function matchLimitOrders(
           { side: 'buy',  type: 'limit', price: { gte: currentPrice } },
           { side: 'sell', type: 'limit', price: { lte: currentPrice } },
           { side: 'sell', type: 'stop',  price: { gte: currentPrice } },
+          // Buy stop: triggers when price rises above stop price
+          { side: 'buy',  type: 'stop',  price: { lte: currentPrice } },
         ],
       },
       include: {
@@ -58,12 +62,18 @@ async function matchLimitOrders(
     });
 
     for (const order of triggeredOrders) {
-      await fillLimitOrder(prisma, io, order, currentPrice);
+      await fillLimitOrder(prisma, io, order, currentPrice, prices);
     }
   }
 }
 
-async function fillLimitOrder(prisma: PrismaClient, io: SocketServer, order: any, fillPrice: number) {
+async function fillLimitOrder(
+  prisma: PrismaClient,
+  io: SocketServer,
+  order: any,
+  fillPrice: number,
+  allPrices: Record<string, number>
+) {
   const size = parseFloat(order.size.toString());
   const fillValue = size * fillPrice;
   const fee = fillValue * 0.001;
@@ -73,38 +83,61 @@ async function fillLimitOrder(prisma: PrismaClient, io: SocketServer, order: any
       const account = await tx.account.findUnique({ where: { userId: order.userId } });
       if (!account) return;
 
+      const allPositions = await tx.position.findMany({ where: { userId: order.userId } });
+      const cashBalance = parseFloat(account.cashBalance.toString());
+
+      const existingPos = allPositions.find(p => p.symbol === order.symbol);
+      const currentSize = parseFloat(existingPos?.size.toString() || '0');
+      const currentAvgCost = parseFloat(existingPos?.avgCost.toString() || '0');
+
+      const sizeChange = order.side === 'buy' ? size : -size;
+      const newSize = currentSize + sizeChange;
+
+      let cashChange: number;
       if (order.side === 'buy') {
-        const totalCost = fillValue + fee;
-        const balance = parseFloat(account.cashBalance.toString());
-        if (balance < totalCost) {
-          await tx.order.update({ where: { id: order.id }, data: { status: 'cancelled' } });
-          return;
-        }
-
-        await tx.account.update({
-          where: { userId: order.userId },
-          data: { cashBalance: { decrement: new Prisma.Decimal(totalCost) } },
-        });
-
-        await upsertPosition(tx, order.userId, order.symbol, size, fillPrice, 'buy');
-
+        cashChange = -(fillValue + fee);
       } else {
-        const position = await tx.position.findUnique({
-          where: { userId_symbol: { userId: order.userId, symbol: order.symbol } },
-        });
-        const currentSize = parseFloat(position?.size.toString() || '0');
-        if (currentSize < size) {
-          await tx.order.update({ where: { id: order.id }, data: { status: 'cancelled' } });
-          return;
-        }
-
-        await tx.account.update({
-          where: { userId: order.userId },
-          data: { cashBalance: { increment: new Prisma.Decimal(fillValue - fee) } },
-        });
-
-        await upsertPosition(tx, order.userId, order.symbol, size, fillPrice, 'sell');
+        cashChange = fillValue - fee;
       }
+
+      const newCash = cashBalance + cashChange;
+
+      if (newCash < 0) {
+        await tx.order.update({ where: { id: order.id }, data: { status: 'cancelled' } });
+        return;
+      }
+
+      // Margin check
+      const hypotheticalPositions = allPositions
+        .filter(p => p.symbol !== order.symbol)
+        .map(p => ({
+          size: parseFloat(p.size.toString()),
+          price: allPrices[p.symbol] || parseFloat(p.avgCost.toString()),
+        }));
+      if (newSize !== 0) {
+        hypotheticalPositions.push({ size: newSize, price: fillPrice });
+      }
+
+      let equity = newCash;
+      let totalMargin = 0;
+      for (const p of hypotheticalPositions) {
+        equity += p.size * p.price;
+        totalMargin += (Math.abs(p.size) * p.price) / MAX_LEVERAGE;
+      }
+
+      if ((totalMargin > 0 && equity < totalMargin) || equity <= 0) {
+        await tx.order.update({ where: { id: order.id }, data: { status: 'cancelled' } });
+        return;
+      }
+
+      // Update cash
+      await tx.account.update({
+        where: { userId: order.userId },
+        data: { cashBalance: new Prisma.Decimal(newCash) },
+      });
+
+      // Update position
+      await upsertPosition(tx, order.userId, order.symbol, currentSize, currentAvgCost, newSize, fillPrice, order.side);
 
       await tx.order.update({
         where: { id: order.id },
@@ -144,46 +177,194 @@ async function fillLimitOrder(prisma: PrismaClient, io: SocketServer, order: any
   }
 }
 
+/**
+ * Check all accounts for liquidation.
+ * If equity drops to 0 or below, close all positions at market.
+ */
+async function checkLiquidations(
+  prisma: PrismaClient,
+  io: SocketServer,
+  prices: Record<string, number>
+) {
+  // Find all accounts that have open positions
+  const usersWithPositions = await prisma.user.findMany({
+    where: {
+      positions: { some: { NOT: { size: 0 } } },
+    },
+    select: {
+      id: true,
+      name: true,
+      account: { select: { cashBalance: true } },
+      positions: { select: { symbol: true, size: true } },
+    },
+  });
+
+  for (const user of usersWithPositions) {
+    if (!user.account) continue;
+
+    const cashBalance = parseFloat(user.account.cashBalance.toString());
+    let positionValue = 0;
+
+    for (const pos of user.positions) {
+      const size = parseFloat(pos.size.toString());
+      const price = prices[pos.symbol] || 0;
+      positionValue += size * price;
+    }
+
+    const equity = cashBalance + positionValue;
+
+    // Liquidation threshold: equity <= 0
+    if (equity <= 0) {
+      console.log(`[Liquidation] ${user.name} equity=${equity.toFixed(2)}, liquidating all positions`);
+      await liquidateUser(prisma, io, user.id, user.name, prices);
+    }
+  }
+}
+
+async function liquidateUser(
+  prisma: PrismaClient,
+  io: SocketServer,
+  userId: string,
+  userName: string,
+  prices: Record<string, number>
+) {
+  try {
+    await prisma.$transaction(async (tx) => {
+      const positions = await tx.position.findMany({ where: { userId } });
+
+      let totalProceeds = 0;
+      for (const pos of positions) {
+        const size = parseFloat(pos.size.toString());
+        if (size === 0) continue;
+
+        const price = prices[pos.symbol] || 0;
+        const fillValue = Math.abs(size) * price;
+        const fee = fillValue * 0.001;
+
+        // Close position: sell if long, buy if short
+        const side = size > 0 ? 'sell' : 'buy';
+        const proceeds = side === 'sell' ? (fillValue - fee) : -(fillValue + fee);
+        totalProceeds += proceeds;
+
+        // Create liquidation order
+        await tx.order.create({
+          data: {
+            userId,
+            symbol: pos.symbol,
+            side,
+            type: 'market',
+            size: new Prisma.Decimal(Math.abs(size)),
+            fillPrice: new Prisma.Decimal(price),
+            fillValue: new Prisma.Decimal(fillValue),
+            fee: new Prisma.Decimal(fee),
+            status: 'filled',
+            filledAt: new Date(),
+          },
+        });
+
+        // Zero out position
+        const avgCost = parseFloat(pos.avgCost.toString());
+        const realizedPnl = size > 0
+          ? size * (price - avgCost)
+          : Math.abs(size) * (avgCost - price);
+
+        await tx.position.update({
+          where: { userId_symbol: { userId, symbol: pos.symbol } },
+          data: {
+            size: 0,
+            avgCost: 0,
+            realizedPnl: { increment: new Prisma.Decimal(realizedPnl) },
+          },
+        });
+      }
+
+      // Set cash to max(0, current + proceeds)
+      const account = await tx.account.findUnique({ where: { userId } });
+      const currentCash = parseFloat(account!.cashBalance.toString());
+      const newCash = Math.max(0, currentCash + totalProceeds);
+
+      await tx.account.update({
+        where: { userId },
+        data: { cashBalance: new Prisma.Decimal(newCash) },
+      });
+
+      await tx.notification.create({
+        data: {
+          userId,
+          type: 'liquidation',
+          message: `LIQUIDATED — All positions closed. Equity reached $0. Remaining cash: $${newCash.toFixed(2)}`,
+        },
+      });
+    });
+
+    io.to(`user:${userId}`).emit('liquidation', { message: 'All positions liquidated due to insufficient equity' });
+    io.emit('tradeActivity', {
+      agentName: userName,
+      symbol: 'ALL' as any,
+      side: 'liquidation' as any,
+      size: 0,
+      price: 0,
+    });
+
+  } catch (err: any) {
+    console.error(`[Liquidation] Failed for user ${userId}:`, err.message);
+  }
+}
+
 async function upsertPosition(
   tx: Prisma.TransactionClient,
   userId: string,
   symbol: string,
-  size: number,
-  price: number,
-  side: 'buy' | 'sell'
+  oldSize: number,
+  oldAvgCost: number,
+  newSize: number,
+  fillPrice: number,
+  side: string
 ) {
-  const existing = await tx.position.findUnique({
-    where: { userId_symbol: { userId, symbol } },
-  });
+  // Calculate realized PnL from the closing portion
+  let realizedPnl = 0;
 
-  if (side === 'buy') {
-    const oldSize = parseFloat(existing?.size.toString() || '0');
-    const oldCost = parseFloat(existing?.avgCost.toString() || price.toString());
-    const newSize = oldSize + size;
-    const newAvgCost = oldSize === 0 ? price : (oldSize * oldCost + size * price) / newSize;
-
-    await tx.position.upsert({
-      where: { userId_symbol: { userId, symbol } },
-      update: {
-        size: new Prisma.Decimal(newSize),
-        avgCost: new Prisma.Decimal(newAvgCost),
-      },
-      create: { userId, symbol, size, avgCost: price },
-    });
-  } else {
-    if (!existing) return;
-    const oldSize = parseFloat(existing.size.toString());
-    const avgCost = parseFloat(existing.avgCost.toString());
-    const newSize = Math.max(0, oldSize - size);
-    const realizedPnl = size * (price - avgCost);
-
-    await tx.position.update({
-      where: { userId_symbol: { userId, symbol } },
-      data: {
-        size: new Prisma.Decimal(newSize),
-        avgCost: newSize === 0 ? new Prisma.Decimal(0) : existing.avgCost,
-        realizedPnl: { increment: new Prisma.Decimal(realizedPnl) },
-      },
-    });
+  if (side === 'sell' && oldSize > 0 && newSize < oldSize) {
+    // Closing part or all of a long
+    const closed = Math.min(oldSize, oldSize - newSize);
+    realizedPnl = closed * (fillPrice - oldAvgCost);
+  } else if (side === 'buy' && oldSize < 0 && newSize > oldSize) {
+    // Closing part or all of a short
+    const closed = Math.min(Math.abs(oldSize), newSize - oldSize);
+    realizedPnl = closed * (oldAvgCost - fillPrice);
   }
+
+  // Calculate new average cost
+  let newAvgCost: number;
+
+  if (newSize === 0) {
+    newAvgCost = 0;
+  } else if (Math.sign(newSize) !== Math.sign(oldSize) && oldSize !== 0) {
+    newAvgCost = fillPrice;
+  } else if (Math.sign(newSize) === Math.sign(oldSize) && oldSize !== 0) {
+    if (Math.abs(newSize) > Math.abs(oldSize)) {
+      const addedSize = Math.abs(newSize) - Math.abs(oldSize);
+      newAvgCost = (Math.abs(oldSize) * oldAvgCost + addedSize * fillPrice) / Math.abs(newSize);
+    } else {
+      newAvgCost = oldAvgCost;
+    }
+  } else {
+    newAvgCost = fillPrice;
+  }
+
+  await tx.position.upsert({
+    where: { userId_symbol: { userId, symbol } },
+    update: {
+      size: new Prisma.Decimal(newSize),
+      avgCost: new Prisma.Decimal(newAvgCost),
+      realizedPnl: { increment: new Prisma.Decimal(realizedPnl) },
+    },
+    create: {
+      userId,
+      symbol,
+      size: new Prisma.Decimal(newSize),
+      avgCost: new Prisma.Decimal(newAvgCost),
+      realizedPnl: new Prisma.Decimal(realizedPnl),
+    },
+  });
 }

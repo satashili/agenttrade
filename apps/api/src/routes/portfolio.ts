@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
 import { marketData } from '../services/binanceFeed.js';
+import { MAX_LEVERAGE } from '../services/trading.js';
 
 export default async function portfolioRoutes(fastify: FastifyInstance) {
   // GET /api/v1/portfolio — Full portfolio with live PnL
@@ -22,19 +23,28 @@ export default async function portfolioRoutes(fastify: FastifyInstance) {
     let positionValue = 0;
     let totalUnrealizedPnl = 0;
     let totalRealizedPnl = 0;
+    let totalMarginUsed = 0;
 
     const positionsOut: Record<string, any> = {};
 
     for (const pos of positions) {
       const size = parseFloat(pos.size.toString());
-      if (size === 0) continue;
+      if (size === 0) continue; // Filter out zero positions
 
       const avgCost = parseFloat(pos.avgCost.toString());
       const realizedPnl = parseFloat(pos.realizedPnl.toString());
       const currentPrice = prices[pos.symbol] || avgCost;
+
+      // For longs: value is positive; for shorts: value is negative
       const value = size * currentPrice;
-      const unrealizedPnl = size * (currentPrice - avgCost);
-      const unrealizedPnlPct = avgCost > 0 ? ((currentPrice - avgCost) / avgCost) * 100 : 0;
+      const unrealizedPnl = size > 0
+        ? size * (currentPrice - avgCost)        // Long: profit when price goes up
+        : Math.abs(size) * (avgCost - currentPrice); // Short: profit when price goes down
+      const costBasis = Math.abs(size) * avgCost;
+      const unrealizedPnlPct = costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0;
+
+      const marginUsed = (Math.abs(size) * currentPrice) / MAX_LEVERAGE;
+      totalMarginUsed += marginUsed;
 
       positionValue += value;
       totalUnrealizedPnl += unrealizedPnl;
@@ -42,6 +52,7 @@ export default async function portfolioRoutes(fastify: FastifyInstance) {
 
       positionsOut[pos.symbol] = {
         symbol: pos.symbol,
+        side: size > 0 ? 'long' : 'short',
         size,
         avgCost,
         currentPrice,
@@ -49,6 +60,7 @@ export default async function portfolioRoutes(fastify: FastifyInstance) {
         unrealizedPnl,
         unrealizedPnlPct,
         realizedPnl,
+        marginUsed,
       };
     }
 
@@ -56,6 +68,15 @@ export default async function portfolioRoutes(fastify: FastifyInstance) {
     const totalDeposited = parseFloat(account.totalDeposited.toString());
     const totalPnl = totalValue - totalDeposited;
     const totalPnlPct = ((totalValue - totalDeposited) / totalDeposited) * 100;
+    const availableMargin = Math.max(0, totalValue - totalMarginUsed);
+
+    // Add allocation percentages
+    for (const key of Object.keys(positionsOut)) {
+      const p = positionsOut[key];
+      p.allocationPct = totalValue > 0
+        ? parseFloat(((Math.abs(p.value) / totalValue) * 100).toFixed(2))
+        : 0;
+    }
 
     return reply.send({
       cashBalance,
@@ -65,6 +86,14 @@ export default async function portfolioRoutes(fastify: FastifyInstance) {
       totalPnlPct,
       totalUnrealizedPnl,
       totalRealizedPnl,
+      leverage: {
+        maxLeverage: MAX_LEVERAGE,
+        totalMarginUsed,
+        availableMargin,
+        currentLeverage: totalValue > 0
+          ? parseFloat(((totalMarginUsed * MAX_LEVERAGE) / totalValue).toFixed(2))
+          : 0,
+      },
       positions: positionsOut,
     });
   });
@@ -127,15 +156,36 @@ export default async function portfolioRoutes(fastify: FastifyInstance) {
       if (o.side === 'buy') {
         cash -= (value + fee);
         const newSize = pos.size + size;
-        pos.avgCost = pos.size === 0 ? price : (pos.size * pos.avgCost + size * price) / newSize;
+        if (pos.size >= 0) {
+          // Adding to long or opening fresh
+          pos.avgCost = pos.size === 0 ? price : (pos.size * pos.avgCost + size * price) / newSize;
+        } else if (newSize <= 0) {
+          // Reducing short — keep avgCost
+        } else {
+          // Flipping from short to long
+          pos.avgCost = price;
+        }
         pos.size = newSize;
       } else {
         cash += (value - fee);
-        pos.size = Math.max(0, pos.size - size);
-        if (pos.size === 0) pos.avgCost = 0;
+        const newSize = pos.size - size;
+        if (pos.size <= 0) {
+          // Adding to short or opening fresh
+          const absOld = Math.abs(pos.size);
+          const absNew = Math.abs(newSize);
+          pos.avgCost = absOld === 0 ? price : (absOld * pos.avgCost + size * price) / absNew;
+        } else if (newSize >= 0) {
+          // Reducing long — keep avgCost
+        } else {
+          // Flipping from long to short
+          pos.avgCost = price;
+        }
+        pos.size = newSize;
       }
 
-      // Compute position value — use fillPrice for traded symbol as market price at that time
+      if (pos.size === 0) pos.avgCost = 0;
+
+      // Compute position value
       let positionValue = 0;
       for (const [sym, p] of Object.entries(positions)) {
         const priceAtTime = sym === o.symbol ? price : p.avgCost;

@@ -81,6 +81,7 @@ export default async function marketRoutes(fastify: FastifyInstance) {
 
       const candles = raw.map((k: any) => ({
         time: k[0],
+        timeISO: new Date(k[0]).toISOString(),
         open: parseFloat(k[1]),
         high: parseFloat(k[2]),
         low: parseFloat(k[3]),

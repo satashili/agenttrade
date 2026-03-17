@@ -1,6 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { marketData } from '../services/binanceFeed.js';
 
+// In-memory previous rankings for rank change tracking
+let previousRanks: Map<string, number> = new Map();
+
 export default async function leaderboardRoutes(fastify: FastifyInstance) {
   fastify.get('/leaderboard', async (request, reply) => {
     const { limit = '50' } = request.query as { limit?: string };
@@ -49,15 +52,36 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
         const pos = positions[o.symbol];
 
         if (o.side === 'buy') {
+          if (pos.size < 0) {
+            // Closing short — check if profitable
+            const closingSize = Math.min(size, Math.abs(pos.size));
+            if (pos.avgCost > price) wins++;
+            else if (closingSize > 0) losses++;
+          }
           const newSize = pos.size + size;
-          pos.avgCost = pos.size === 0 ? price : (pos.size * pos.avgCost + size * price) / newSize;
+          if (pos.size >= 0) {
+            pos.avgCost = pos.size === 0 ? price : (pos.size * pos.avgCost + size * price) / newSize;
+          } else if (newSize > 0) {
+            pos.avgCost = price; // flipped to long
+          }
           pos.size = newSize;
         } else {
-          if (price > pos.avgCost) wins++;
-          else losses++;
-          pos.size = Math.max(0, pos.size - size);
-          if (pos.size === 0) pos.avgCost = 0;
+          if (pos.size > 0) {
+            // Closing long — check if profitable
+            if (price > pos.avgCost) wins++;
+            else losses++;
+          }
+          const newSize = pos.size - size;
+          if (pos.size <= 0) {
+            const absOld = Math.abs(pos.size);
+            const absNew = Math.abs(newSize);
+            pos.avgCost = absOld === 0 ? price : (absOld * pos.avgCost + size * price) / absNew;
+          } else if (newSize < 0) {
+            pos.avgCost = price; // flipped to short
+          }
+          pos.size = newSize;
         }
+        if (pos.size === 0) pos.avgCost = 0;
       }
 
       const total = wins + losses;
@@ -68,8 +92,11 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
       const cashBalance = parseFloat(agent.account?.cashBalance.toString() || '100000');
       const totalDeposited = parseFloat(agent.account?.totalDeposited.toString() || '100000');
       let positionValue = 0;
+      let hasShort = false;
       for (const pos of agent.positions) {
-        positionValue += parseFloat(pos.size.toString()) * (prices[pos.symbol] || 0);
+        const size = parseFloat(pos.size.toString());
+        positionValue += size * (prices[pos.symbol] || 0);
+        if (size < 0) hasShort = true;
       }
       const totalValue = cashBalance + positionValue;
       const totalPnlPct = ((totalValue - totalDeposited) / totalDeposited) * 100;
@@ -91,19 +118,36 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
         totalPnlPct,
         tradeCount: agent._count.orders,
         winRate,
+        hasShort,
       };
     }).sort((a, b) => b.totalPnlPct - a.totalPnlPct).slice(0, take);
 
-    return reply.send({
-      data: ranked.map((r, i) => ({
-        rank: i + 1,
+    // Calculate rank changes
+    const result = ranked.map((r, i) => {
+      const currentRank = i + 1;
+      const prevRank = previousRanks.get(r.agent.id);
+      const rankChange = prevRank !== undefined ? prevRank - currentRank : 0; // positive = moved up
+
+      return {
+        rank: currentRank,
+        rankChange,
         agent: r.agent,
         totalValue: r.totalValue,
         totalPnlPct: r.totalPnlPct,
         weekPnlPct: r.totalPnlPct,
         tradeCount: r.tradeCount,
         winRate: r.winRate,
-      })),
+        hasShort: r.hasShort,
+      };
     });
+
+    // Save current rankings for next comparison
+    const newRanks = new Map<string, number>();
+    for (const r of result) {
+      newRanks.set(r.agent.id, r.rank);
+    }
+    previousRanks = newRanks;
+
+    return reply.send({ data: result });
   });
 }

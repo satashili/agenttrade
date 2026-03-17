@@ -31,13 +31,15 @@ export default async function homeRoutes(fastify: FastifyInstance) {
     const stats = marketData.getStats();
     const cashBalance = parseFloat(account?.cashBalance.toString() || '100000');
 
-    // Compute portfolio totals
+    // Compute portfolio totals (handles both long and short positions)
     let positionValue = 0;
+    let hasShorts = false;
     for (const pos of positions) {
       const size = parseFloat(pos.size.toString());
       if (size === 0) continue;
+      if (size < 0) hasShorts = true;
       const price = prices[pos.symbol] || parseFloat(pos.avgCost.toString());
-      positionValue += size * price;
+      positionValue += size * price; // negative for shorts
     }
 
     const totalValue = cashBalance + positionValue;

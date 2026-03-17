@@ -2,6 +2,45 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { Server as SocketServer } from 'socket.io';
 
 const FEE_RATE = 0.001; // 0.1%
+const MAX_LEVERAGE = 5;
+
+/**
+ * Calculate margin requirement for a position.
+ * margin = abs(positionValue) / MAX_LEVERAGE
+ */
+function marginRequired(size: number, price: number): number {
+  return (Math.abs(size) * price) / MAX_LEVERAGE;
+}
+
+/**
+ * Calculate total equity: cash + sum of position market values.
+ * For long positions: size * price (positive)
+ * For short positions: size * price (negative — since size is negative)
+ * Net equity = cash + sum(size * price)
+ */
+function calcEquity(
+  cashBalance: number,
+  positions: Array<{ size: number; price: number }>
+): number {
+  let posValue = 0;
+  for (const p of positions) {
+    posValue += p.size * p.price;
+  }
+  return cashBalance + posValue;
+}
+
+/**
+ * Calculate total margin used across all positions.
+ */
+function calcTotalMarginUsed(
+  positions: Array<{ size: number; price: number }>
+): number {
+  let margin = 0;
+  for (const p of positions) {
+    margin += marginRequired(p.size, p.price);
+  }
+  return margin;
+}
 
 export async function executeMarketOrder(
   prisma: PrismaClient,
@@ -21,45 +60,73 @@ export async function executeMarketOrder(
       const account = await tx.account.findUnique({ where: { userId } });
       if (!account) throw new Error('Account not found');
 
+      const allPositions = await tx.position.findMany({ where: { userId } });
+      const cashBalance = parseFloat(account.cashBalance.toString());
+
+      // Get current position for this symbol
+      const existingPos = allPositions.find(p => p.symbol === symbol);
+      const currentSize = parseFloat(existingPos?.size.toString() || '0');
+      const currentAvgCost = parseFloat(existingPos?.avgCost.toString() || '0');
+
+      // Calculate new position size after trade
+      const sizeChange = side === 'buy' ? size : -size;
+      const newSize = currentSize + sizeChange;
+
+      // Calculate cash change
+      let cashChange: number;
       if (side === 'buy') {
-        const totalCost = fillValue + fee;
-        const balance = parseFloat(account.cashBalance.toString());
-
-        if (balance < totalCost) {
-          throw new Error(`Insufficient balance. Required: $${totalCost.toFixed(2)}, Available: $${balance.toFixed(2)}`);
-        }
-
-        // Deduct from cash
-        await tx.account.update({
-          where: { userId },
-          data: { cashBalance: { decrement: new Prisma.Decimal(totalCost) } },
-        });
-
-        // Update position
-        await upsertPosition(tx, userId, symbol, size, fillPrice, 'buy');
-
+        // Buying: pay cash + fee
+        cashChange = -(fillValue + fee);
       } else {
-        // Sell: check position
-        const position = await tx.position.findUnique({
-          where: { userId_symbol: { userId, symbol } },
-        });
-
-        const currentSize = parseFloat(position?.size.toString() || '0');
-        if (currentSize < size) {
-          throw new Error(`Insufficient position. Required: ${size} ${symbol}, Available: ${currentSize}`);
-        }
-
-        const proceeds = fillValue - fee;
-
-        // Add to cash
-        await tx.account.update({
-          where: { userId },
-          data: { cashBalance: { increment: new Prisma.Decimal(proceeds) } },
-        });
-
-        // Update position
-        await upsertPosition(tx, userId, symbol, size, fillPrice, 'sell');
+        // Selling (close long or open short): receive cash - fee
+        cashChange = fillValue - fee;
       }
+
+      const newCash = cashBalance + cashChange;
+
+      // Check: new cash cannot be negative
+      if (newCash < 0) {
+        throw new Error(`Insufficient balance. Required: $${(-cashChange).toFixed(2)}, Available: $${cashBalance.toFixed(2)}`);
+      }
+
+      // Build hypothetical positions array for margin check
+      const prices = await getPositionPrices(tx, allPositions, symbol, fillPrice);
+      const hypotheticalPositions = allPositions
+        .filter(p => p.symbol !== symbol)
+        .map(p => ({
+          size: parseFloat(p.size.toString()),
+          price: prices[p.symbol] || parseFloat(p.avgCost.toString()),
+        }));
+      // Add the new position for the traded symbol
+      if (newSize !== 0) {
+        hypotheticalPositions.push({ size: newSize, price: fillPrice });
+      }
+
+      const equity = calcEquity(newCash, hypotheticalPositions);
+      const totalMargin = calcTotalMarginUsed(hypotheticalPositions);
+
+      // Margin check: equity must cover total margin requirement
+      if (totalMargin > 0 && equity < totalMargin) {
+        throw new Error(
+          `Insufficient margin. Required: $${totalMargin.toFixed(2)}, Equity: $${equity.toFixed(2)} (max ${MAX_LEVERAGE}x leverage)`
+        );
+      }
+
+      // Equity must stay positive
+      if (equity <= 0) {
+        throw new Error('Trade would result in negative equity');
+      }
+
+      // Update cash
+      await tx.account.update({
+        where: { userId },
+        data: {
+          cashBalance: new Prisma.Decimal(newCash),
+        },
+      });
+
+      // Update position
+      await upsertPosition(tx, userId, symbol, currentSize, currentAvgCost, newSize, fillPrice, side);
 
       // Create filled order record
       const order = await tx.order.create({
@@ -88,9 +155,9 @@ export async function executeMarketOrder(
       });
 
       const updatedAccount = await tx.account.findUnique({ where: { userId } });
-      const positions = await tx.position.findMany({ where: { userId } });
+      const updatedPositions = await tx.position.findMany({ where: { userId } });
 
-      return { order, account: updatedAccount, positions };
+      return { order, account: updatedAccount, positions: updatedPositions };
     });
 
     // Broadcast trade activity to all clients
@@ -126,7 +193,6 @@ export async function executeMarketOrder(
     }
 
     // Build portfolio summary
-    const prices: Record<string, number> = {};  // placeholder; portfolio uses marketData directly
     const cashBalance = parseFloat(result.account!.cashBalance.toString());
 
     return {
@@ -136,10 +202,12 @@ export async function executeMarketOrder(
         portfolio: {
           cashBalance,
           positions: Object.fromEntries(
-            result.positions.map(p => [p.symbol, {
-              size: parseFloat(p.size.toString()),
-              avgCost: parseFloat(p.avgCost.toString()),
-            }])
+            result.positions
+              .filter(p => parseFloat(p.size.toString()) !== 0)
+              .map(p => [p.symbol, {
+                size: parseFloat(p.size.toString()),
+                avgCost: parseFloat(p.avgCost.toString()),
+              }])
           ),
         },
       },
@@ -149,58 +217,113 @@ export async function executeMarketOrder(
   }
 }
 
+/**
+ * Get current prices for all positions (using binanceFeed market data at runtime).
+ * We pass the traded symbol's fill price explicitly.
+ */
+async function getPositionPrices(
+  _tx: Prisma.TransactionClient,
+  positions: Array<{ symbol: string; avgCost: any }>,
+  tradedSymbol: string,
+  tradedPrice: number
+): Promise<Record<string, number>> {
+  // Import market data dynamically to avoid circular deps
+  const { marketData } = await import('./binanceFeed.js');
+  const livePrices = marketData.getPrices();
+  const prices: Record<string, number> = {};
+
+  for (const p of positions) {
+    if (p.symbol === tradedSymbol) {
+      prices[p.symbol] = tradedPrice;
+    } else {
+      prices[p.symbol] = livePrices[p.symbol] || parseFloat(p.avgCost.toString());
+    }
+  }
+
+  return prices;
+}
+
+/**
+ * Update position after a trade. Handles:
+ * - Opening long (buy from 0)
+ * - Adding to long (buy more)
+ * - Closing long (sell to 0)
+ * - Reducing long (partial sell)
+ * - Opening short (sell from 0)
+ * - Adding to short (sell more when already short)
+ * - Closing short (buy to cover)
+ * - Reducing short (partial buy to cover)
+ * - Flipping (long to short or short to long)
+ */
 async function upsertPosition(
   tx: Prisma.TransactionClient,
   userId: string,
   symbol: string,
-  size: number,
-  price: number,
+  oldSize: number,
+  oldAvgCost: number,
+  newSize: number,
+  fillPrice: number,
   side: 'buy' | 'sell'
 ) {
-  const existing = await tx.position.findUnique({
-    where: { userId_symbol: { userId, symbol } },
-  });
+  // Calculate realized PnL from the closing portion
+  let realizedPnl = 0;
 
-  if (side === 'buy') {
-    if (!existing || parseFloat(existing.size.toString()) === 0) {
-      await tx.position.upsert({
-        where: { userId_symbol: { userId, symbol } },
-        update: {
-          size: { increment: new Prisma.Decimal(size) },
-          avgCost: new Prisma.Decimal(price),
-        },
-        create: { userId, symbol, size, avgCost: price },
-      });
+  if (side === 'sell' && oldSize > 0) {
+    // Selling while long: closing (partially or fully) a long position
+    const closingSize = Math.min(oldSize, oldSize - Math.max(newSize, 0));
+    // closingSize = how much of the long we're closing
+    const actualClosing = Math.min(Math.abs(oldSize), Math.abs(oldSize - newSize));
+    if (oldSize > 0 && newSize < oldSize) {
+      const closed = Math.min(oldSize, oldSize - newSize);  // amount closed from long
+      const closedFromLong = Math.min(closed, oldSize);  // can't close more than we had
+      realizedPnl = closedFromLong * (fillPrice - oldAvgCost);
+    }
+  } else if (side === 'buy' && oldSize < 0) {
+    // Buying while short: closing (partially or fully) a short position
+    const closedFromShort = Math.min(Math.abs(oldSize), Math.abs(newSize - oldSize));
+    const actualClosed = Math.min(closedFromShort, Math.abs(oldSize));
+    // Short PnL: profit when price goes down, loss when price goes up
+    realizedPnl = actualClosed * (oldAvgCost - fillPrice);
+  }
+
+  // Calculate new average cost
+  let newAvgCost: number;
+
+  if (newSize === 0) {
+    newAvgCost = 0;
+  } else if (Math.sign(newSize) !== Math.sign(oldSize) && oldSize !== 0) {
+    // Position flipped — new avgCost is the fill price for the new direction portion
+    newAvgCost = fillPrice;
+  } else if (Math.sign(newSize) === Math.sign(oldSize) && oldSize !== 0) {
+    // Same direction — check if we're adding or reducing
+    if (Math.abs(newSize) > Math.abs(oldSize)) {
+      // Adding to position: weighted average
+      const addedSize = Math.abs(newSize) - Math.abs(oldSize);
+      newAvgCost = (Math.abs(oldSize) * oldAvgCost + addedSize * fillPrice) / Math.abs(newSize);
     } else {
-      const oldSize = parseFloat(existing.size.toString());
-      const oldCost = parseFloat(existing.avgCost.toString());
-      const newSize = oldSize + size;
-      const newAvgCost = (oldSize * oldCost + size * price) / newSize;
-
-      await tx.position.update({
-        where: { userId_symbol: { userId, symbol } },
-        data: {
-          size: new Prisma.Decimal(newSize),
-          avgCost: new Prisma.Decimal(newAvgCost),
-        },
-      });
+      // Reducing position: keep old avgCost
+      newAvgCost = oldAvgCost;
     }
   } else {
-    if (!existing) return;
-    const oldSize = parseFloat(existing.size.toString());
-    const avgCost = parseFloat(existing.avgCost.toString());
-    const newSize = Math.max(0, oldSize - size);
-    const realizedPnl = size * (price - avgCost);
-
-    await tx.position.update({
-      where: { userId_symbol: { userId, symbol } },
-      data: {
-        size: new Prisma.Decimal(newSize),
-        avgCost: newSize === 0 ? new Prisma.Decimal(0) : existing.avgCost,
-        realizedPnl: { increment: new Prisma.Decimal(realizedPnl) },
-      },
-    });
+    // Opening fresh position
+    newAvgCost = fillPrice;
   }
+
+  await tx.position.upsert({
+    where: { userId_symbol: { userId, symbol } },
+    update: {
+      size: new Prisma.Decimal(newSize),
+      avgCost: new Prisma.Decimal(newAvgCost),
+      realizedPnl: { increment: new Prisma.Decimal(realizedPnl) },
+    },
+    create: {
+      userId,
+      symbol,
+      size: new Prisma.Decimal(newSize),
+      avgCost: new Prisma.Decimal(newAvgCost),
+      realizedPnl: new Prisma.Decimal(realizedPnl),
+    },
+  });
 }
 
 function serializeOrder(order: any) {
@@ -218,3 +341,5 @@ function serializeOrder(order: any) {
     filledAt: order.filledAt?.toISOString() || null,
   };
 }
+
+export { MAX_LEVERAGE, marginRequired, calcEquity, calcTotalMarginUsed };
