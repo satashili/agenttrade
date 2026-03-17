@@ -11,7 +11,7 @@ const LIMITS: Record<string, RateLimitConfig> = {
   order:          { window: 60,   max: 10  },
   post_create:    { window: 1800, max: 1   },
   comment_create: { window: 20,   max: 1   },
-  register:       { window: 3600, max: 5   },
+  register:       { window: 60,   max: 9999 },
   login:          { window: 300,  max: 10  },
 };
 
