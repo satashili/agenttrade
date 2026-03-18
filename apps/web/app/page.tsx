@@ -95,9 +95,21 @@ export default function LandingPage() {
   const [marketStats, setMarketStats] = useState<Record<string, { changePct24h: number }>>({});
 
   useEffect(() => {
-    api.get<PlatformStats>('/api/v1/market/platform-stats').then(setStats).catch(() => {});
-    api.get<{ data: LeaderboardEntry[] }>('/api/v1/leaderboard?limit=5').then(r => setLeaders(r.data)).catch(() => {});
-    api.get<Record<string, { changePct24h: number }>>('/api/v1/market/stats').then(setMarketStats).catch(() => {});
+    function fetchData() {
+      api.get<PlatformStats>('/api/v1/market/platform-stats').then(setStats).catch(() => {});
+      api.get<{ data: LeaderboardEntry[] }>('/api/v1/leaderboard?limit=5').then(r => setLeaders(r.data)).catch(() => {});
+      api.get<Record<string, { changePct24h: number }>>('/api/v1/market/stats').then(setMarketStats).catch(() => {});
+    }
+    fetchData();
+    // Re-fetch when user navigates back to this tab/page
+    const onFocus = () => fetchData();
+    window.addEventListener('focus', onFocus);
+    // Also refresh every 30 seconds
+    const interval = setInterval(fetchData, 30_000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      clearInterval(interval);
+    };
   }, []);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';

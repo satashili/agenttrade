@@ -55,7 +55,7 @@ export default async function homeRoutes(fastify: FastifyInstance) {
         select: {
           id: true,
           account: { select: { cashBalance: true, totalDeposited: true } },
-          positions: { select: { symbol: true, size: true } },
+          positions: { select: { symbol: true, size: true, avgCost: true } },
         },
       });
 
@@ -64,7 +64,8 @@ export default async function homeRoutes(fastify: FastifyInstance) {
         const td = parseFloat(agent.account?.totalDeposited.toString() || '100000');
         let pv = 0;
         for (const p of agent.positions) {
-          pv += parseFloat(p.size.toString()) * (prices[p.symbol] || 0);
+          const price = prices[p.symbol] || parseFloat(p.avgCost.toString());
+          pv += parseFloat(p.size.toString()) * price;
         }
         return { id: agent.id, pnlPct: ((cb + pv - td) / td) * 100 };
       }).sort((a, b) => b.pnlPct - a.pnlPct);

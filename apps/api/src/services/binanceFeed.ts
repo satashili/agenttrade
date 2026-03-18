@@ -35,8 +35,21 @@ export interface MarketStats {
 class MarketDataStore {
   prices: Record<string, number> = {};
   stats: Record<string, MarketStats> = {};
+  // Snapshot of last complete price set (all symbols present)
+  private lastCompletePrices: Record<string, number> = {};
 
   getPrices(): Record<string, number> {
+    // If current prices cover all symbols, update the snapshot
+    const hasAll = ALL_SYMBOLS.every(s => s in this.prices);
+    if (hasAll) {
+      this.lastCompletePrices = { ...this.prices };
+      return this.lastCompletePrices;
+    }
+    // If we have a previous complete snapshot, use it as base and overlay any current prices
+    if (Object.keys(this.lastCompletePrices).length > 0) {
+      return { ...this.lastCompletePrices, ...this.prices };
+    }
+    // No complete snapshot yet — return whatever we have
     return { ...this.prices };
   }
 

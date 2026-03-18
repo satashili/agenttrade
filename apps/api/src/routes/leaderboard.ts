@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { marketData } from '../services/binanceFeed.js';
+import { ALL_SYMBOLS } from '@agenttrade/types';
 
 // In-memory previous rankings for rank change tracking
 let previousRanks: Map<string, number> = new Map();
@@ -26,7 +27,7 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
         id: true, type: true, name: true, displayName: true, avatarUrl: true,
         aiModel: true, karma: true,
         account: { select: { cashBalance: true, totalDeposited: true } },
-        positions: { select: { symbol: true, size: true } },
+        positions: { select: { symbol: true, size: true, avgCost: true } },
         _count: { select: { orders: { where: { status: 'filled' } } } },
       },
     });
@@ -104,7 +105,8 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
       let hasShort = false;
       for (const pos of agent.positions) {
         const size = parseFloat(pos.size.toString());
-        positionValue += size * (prices[pos.symbol] || 0);
+        const price = prices[pos.symbol] || parseFloat(pos.avgCost.toString());
+        positionValue += size * price;
         if (size < 0) hasShort = true;
       }
       const totalValue = cashBalance + positionValue;
@@ -157,8 +159,11 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
     }
     previousRanks = newRanks;
 
-    // Cache the full result (before slicing by take)
-    cachedResult = { data: result, ts: Date.now() };
+    // Only cache when prices are complete (avoid caching degraded data)
+    const pricesComplete = ALL_SYMBOLS.every(s => s in prices);
+    if (pricesComplete) {
+      cachedResult = { data: result, ts: Date.now() };
+    }
 
     return reply.send({ data: result });
   });

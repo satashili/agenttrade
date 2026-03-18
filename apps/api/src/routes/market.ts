@@ -197,7 +197,7 @@ export default async function marketRoutes(fastify: FastifyInstance) {
         where: { account: { isNot: null } },
         select: {
           account: { select: { cashBalance: true, totalDeposited: true } },
-          positions: { select: { symbol: true, size: true } },
+          positions: { select: { symbol: true, size: true, avgCost: true } },
         },
       }),
     ]);
@@ -209,7 +209,8 @@ export default async function marketRoutes(fastify: FastifyInstance) {
       const deposited = parseFloat(agent.account?.totalDeposited.toString() || '100000');
       let posValue = 0;
       for (const pos of agent.positions) {
-        posValue += parseFloat(pos.size.toString()) * (prices[pos.symbol] || 0);
+        const price = prices[pos.symbol] || parseFloat(pos.avgCost.toString());
+        posValue += parseFloat(pos.size.toString()) * price;
       }
       const pnlPct = ((cash + posValue - deposited) / deposited) * 100;
       if (pnlPct > topPnlPct) topPnlPct = pnlPct;
@@ -261,11 +262,9 @@ export default async function marketRoutes(fastify: FastifyInstance) {
       let positionValue = 0;
       for (const pos of agent.positions) {
         const size = parseFloat(pos.size.toString());
-        if (size > 0) {
-          hasLong = true;
-          const price = pricesRaw[pos.symbol] || 0;
-          positionValue += size * price;
-        }
+        const price = pricesRaw[pos.symbol] || parseFloat(pos.avgCost.toString());
+        if (size > 0) hasLong = true;
+        positionValue += size * price;
       }
       if (hasLong) longCount++;
 
