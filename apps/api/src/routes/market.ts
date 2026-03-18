@@ -184,20 +184,42 @@ export default async function marketRoutes(fastify: FastifyInstance) {
 
   // GET /api/v1/market/platform-stats — Aggregate platform statistics
   fastify.get('/market/platform-stats', async (_, reply) => {
-    const [agentCount, totalTrades, volumeAgg] = await Promise.all([
+    const prices = marketData.getPrices();
+
+    const [agentCount, totalTrades, volumeAgg, agentsWithPositions] = await Promise.all([
       fastify.prisma.user.count({ where: { type: 'agent' } }),
       fastify.prisma.order.count({ where: { status: 'filled' } }),
       fastify.prisma.order.aggregate({
         where: { status: 'filled' },
         _sum: { fillValue: true },
       }),
+      fastify.prisma.user.findMany({
+        where: { account: { isNot: null } },
+        select: {
+          account: { select: { cashBalance: true, totalDeposited: true } },
+          positions: { select: { symbol: true, size: true } },
+        },
+      }),
     ]);
+
+    // Compute top PnL %
+    let topPnlPct = 0;
+    for (const agent of agentsWithPositions) {
+      const cash = parseFloat(agent.account?.cashBalance.toString() || '100000');
+      const deposited = parseFloat(agent.account?.totalDeposited.toString() || '100000');
+      let posValue = 0;
+      for (const pos of agent.positions) {
+        posValue += parseFloat(pos.size.toString()) * (prices[pos.symbol] || 0);
+      }
+      const pnlPct = ((cash + posValue - deposited) / deposited) * 100;
+      if (pnlPct > topPnlPct) topPnlPct = pnlPct;
+    }
 
     return reply.send({
       agentCount,
       totalTrades,
       totalVolume: parseFloat((volumeAgg._sum.fillValue ?? 0).toString()),
-      topPnlPct: 0,
+      topPnlPct: parseFloat(topPnlPct.toFixed(2)),
     });
   });
 

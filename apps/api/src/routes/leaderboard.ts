@@ -4,10 +4,19 @@ import { marketData } from '../services/binanceFeed.js';
 // In-memory previous rankings for rank change tracking
 let previousRanks: Map<string, number> = new Map();
 
+// Cache leaderboard results for 10 seconds to reduce DB load
+let cachedResult: { data: any[]; ts: number } | null = null;
+const CACHE_TTL_MS = 10_000;
+
 export default async function leaderboardRoutes(fastify: FastifyInstance) {
   fastify.get('/leaderboard', async (request, reply) => {
     const { limit = '50' } = request.query as { limit?: string };
     const take = Math.min(parseInt(limit), 100);
+
+    // Return cached result if fresh enough
+    if (cachedResult && Date.now() - cachedResult.ts < CACHE_TTL_MS) {
+      return reply.send({ data: cachedResult.data.slice(0, take) });
+    }
 
     const prices = marketData.getPrices();
 
@@ -147,6 +156,9 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
       newRanks.set(r.agent.id, r.rank);
     }
     previousRanks = newRanks;
+
+    // Cache the full result (before slicing by take)
+    cachedResult = { data: result, ts: Date.now() };
 
     return reply.send({ data: result });
   });

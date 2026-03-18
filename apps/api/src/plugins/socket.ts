@@ -6,7 +6,25 @@ import { ServerToClientEvents, ClientToServerEvents } from '@agenttrade/types';
 declare module 'fastify' {
   interface FastifyInstance {
     io: SocketServer<ClientToServerEvents, ServerToClientEvents>;
+    trackActivity: (userId: string) => void;
   }
+}
+
+// Track active users: userId → last activity timestamp
+const activeUsers: Map<string, number> = new Map();
+const ACTIVE_WINDOW_MS = 120 * 60 * 1000; // 120 minutes
+
+function getActiveCount(): number {
+  const cutoff = Date.now() - ACTIVE_WINDOW_MS;
+  let count = 0;
+  for (const [uid, ts] of activeUsers) {
+    if (ts >= cutoff) {
+      count++;
+    } else {
+      activeUsers.delete(uid);
+    }
+  }
+  return count;
 }
 
 export default fp(async (fastify: FastifyInstance) => {
@@ -21,14 +39,23 @@ export default fp(async (fastify: FastifyInstance) => {
     }
   );
 
-  let onlineCount = 0;
+  // Expose activity tracker so other routes/middleware can record REST API activity
+  function trackActivity(userId: string) {
+    activeUsers.set(userId, Date.now());
+  }
+  fastify.decorate('trackActivity', trackActivity);
+
+  // Broadcast active count every 30 seconds
+  const broadcastInterval = setInterval(() => {
+    io.emit('onlineCount', getActiveCount());
+  }, 30_000);
 
   io.on('connection', (socket) => {
     let authenticatedUserId: string | null = null;
     let authenticatedName: string | null = null;
 
-    onlineCount++;
-    io.emit('onlineCount', onlineCount);
+    // Emit current active count to newly connected client
+    socket.emit('onlineCount', getActiveCount());
 
     socket.on('subscribe', async (userId: string) => {
       socket.join(`user:${userId}`);
@@ -40,6 +67,8 @@ export default fp(async (fastify: FastifyInstance) => {
         if (user) {
           authenticatedUserId = user.id;
           authenticatedName = user.name;
+          trackActivity(user.id);
+          io.emit('onlineCount', getActiveCount());
         }
       } catch (_) {
         // ignore
@@ -49,6 +78,8 @@ export default fp(async (fastify: FastifyInstance) => {
     socket.on('sendChat', async (message: string) => {
       if (!authenticatedName || !authenticatedUserId) return;
       if (!message || typeof message !== 'string' || message.length > 500) return;
+
+      trackActivity(authenticatedUserId);
 
       const ts = Date.now();
       const trimmed = message.trim();
@@ -88,8 +119,7 @@ export default fp(async (fastify: FastifyInstance) => {
     });
 
     socket.on('disconnect', () => {
-      onlineCount = Math.max(0, onlineCount - 1);
-      io.emit('onlineCount', onlineCount);
+      // No decrement needed — count is based on activity window, not connections
     });
   });
 
@@ -153,6 +183,8 @@ export default fp(async (fastify: FastifyInstance) => {
     const trimmed = message.trim();
     const ts = Date.now();
 
+    trackActivity(user.id);
+
     try {
       await fastify.prisma.chatMessage.create({
         data: {
@@ -178,6 +210,7 @@ export default fp(async (fastify: FastifyInstance) => {
 
   fastify.decorate('io', io);
   fastify.addHook('onClose', async () => {
+    clearInterval(broadcastInterval);
     io.close();
   });
 });

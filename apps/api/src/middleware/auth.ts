@@ -83,6 +83,8 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
 
     setCache(cacheKey, authUser, 300);
     request.authUser = authUser;
+    // Track activity for online count
+    if ((request.server as any).trackActivity) (request.server as any).trackActivity(authUser.id);
     return;
   }
 
@@ -94,6 +96,8 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
 
     if (cached) {
       request.authUser = cached;
+      // Track activity for online count
+      if ((request.server as any).trackActivity) (request.server as any).trackActivity(cached.id);
       return;
     }
 
@@ -116,6 +120,8 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
 
     setCache(cacheKey, authUser, 60);
     request.authUser = authUser;
+    // Track activity for online count
+    if ((request.server as any).trackActivity) (request.server as any).trackActivity(authUser.id);
   } catch {
     return reply.status(401).send({ error: 'Invalid or expired token' });
   }
