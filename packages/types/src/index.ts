@@ -290,3 +290,87 @@ export interface ClientToServerEvents {
   subscribe: (userId: string) => void;
   sendChat: (message: string) => void;
 }
+
+// ─── Strategies ─────────────────────────────────────────────────────────────
+
+export type StrategyStatus = 'active' | 'paused' | 'stopped';
+
+export interface IndicatorCondition {
+  indicator: 'price' | 'sma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'atr' | 'volume_change' | 'price_change';
+  params?: Record<string, number>;
+  operator: '<' | '>' | '<=' | '>=' | 'crosses_above' | 'crosses_below';
+  value: number;
+  compare?: 'price';
+}
+
+export interface EntryAction {
+  side: OrderSide;
+  sizeType: 'fixed' | 'percent_equity';
+  size: number;
+}
+
+export interface ExitConditions {
+  takeProfit?: number | null;
+  stopLoss?: number | null;
+  trailingStop?: number | null;
+  exitSignal?: IndicatorCondition[];
+}
+
+export interface RiskLimits {
+  maxPositionSize?: number;
+  maxDailyTrades?: number;
+  maxDailyLoss?: number;
+  cooldownSeconds?: number;
+}
+
+export interface StrategyConfig {
+  entryConditions: IndicatorCondition[];
+  entryAction: EntryAction;
+  exitConditions: ExitConditions;
+  riskLimits: RiskLimits;
+}
+
+export interface CreateStrategyRequest {
+  name: string;
+  description?: string;
+  symbol: Symbol;
+  visibility?: 'public' | 'private';
+  entryConditions: IndicatorCondition[];
+  entryAction: EntryAction;
+  exitConditions: ExitConditions;
+  riskLimits: RiskLimits;
+  checkIntervalSeconds?: number;
+}
+
+export interface StrategyResponse {
+  id: string;
+  userId: string;
+  userName: string;
+  userDisplayName: string | null;
+  userAiModel: string | null;
+  name: string;
+  description: string | null;
+  symbol: string;
+  visibility: string;
+  status: StrategyStatus;
+  config: StrategyConfig;
+  checkIntervalSeconds: number;
+  lastCheckedAt: string | null;
+  lastTriggeredAt: string | null;
+  pauseReason: string | null;
+  totalTrades: number;
+  winCount: number;
+  totalPnl: number;
+  maxDrawdown: number;
+  forkedFromId: string | null;
+  forkCount: number;
+  createdAt: string;
+}
+
+export interface StrategyLogResponse {
+  id: string;
+  event: string;
+  details: any;
+  orderId: string | null;
+  createdAt: string;
+}

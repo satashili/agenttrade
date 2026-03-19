@@ -38,11 +38,14 @@ interface LeverageInfo {
   currentLeverage: number;
 }
 
+const LEVERAGE_OPTIONS = [1, 2, 3, 5] as const;
+
 export function OrderForm({ symbol }: Props) {
   const [side,    setSide]    = useState<Side>('buy');
   const [otype,   setOtype]   = useState<OType>('market');
   const [price,   setPrice]   = useState('');
   const [size,    setSize]    = useState('');
+  const [selectedLeverage, setSelectedLeverage] = useState<number>(1);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
   const [success, setSuccess] = useState('');
@@ -58,6 +61,10 @@ export function OrderForm({ symbol }: Props) {
   const execPrice = otype === 'market' ? currentPrice : parseFloat(price) || 0;
   const sizeNum   = parseFloat(size) || 0;
   const total     = sizeNum && execPrice ? sizeNum * execPrice : null;
+
+  // Max position value at selected leverage
+  const maxValue = cashBalance * selectedLeverage;
+  const maxSize  = execPrice > 0 ? maxValue / execPrice : 0;
 
   // Fetch portfolio for current position & leverage info
   const fetchPortfolio = useCallback(async () => {
@@ -164,12 +171,10 @@ export function OrderForm({ symbol }: Props) {
         ) : (
           <>
             <form onSubmit={submit} className="space-y-2.5">
-              {/* Balance & leverage */}
+              {/* Balance & buying power */}
               <div className="flex justify-between text-[10px] text-slate-500">
                 <span>Balance: <span className="text-slate-300 tabular-nums">${fmtUsd(cashBalance)}</span></span>
-                {leverage && (
-                  <span>Leverage: <span className="text-slate-300 tabular-nums">{leverage.currentLeverage}x</span> / {leverage.maxLeverage}x</span>
-                )}
+                <span>Buying Power: <span className="text-[#1E6FFF] tabular-nums font-medium">${fmtUsd(maxValue)}</span></span>
               </div>
 
               {/* Price input for limit / stop */}
@@ -188,6 +193,25 @@ export function OrderForm({ symbol }: Props) {
                 </div>
               )}
 
+              {/* Leverage selector */}
+              <div>
+                <label className="text-[10px] text-slate-500 block mb-1">Leverage</label>
+                <div className="flex gap-1 bg-bg-secondary rounded p-0.5">
+                  {LEVERAGE_OPTIONS.map(lv => (
+                    <button
+                      key={lv}
+                      type="button"
+                      onClick={() => setSelectedLeverage(lv)}
+                      className={`flex-1 py-1.5 text-xs rounded font-bold transition-colors ${
+                        selectedLeverage === lv
+                          ? 'bg-[#1E6FFF] text-white shadow-sm'
+                          : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >{lv}x</button>
+                  ))}
+                </div>
+              </div>
+
               {/* Market price hint */}
               {otype === 'market' && (
                 <div className="flex justify-between text-[10px]">
@@ -198,7 +222,14 @@ export function OrderForm({ symbol }: Props) {
 
               {/* Size */}
               <div>
-                <label className="text-[10px] text-slate-500 block mb-1">Amount ({symbol})</label>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-[10px] text-slate-500">Amount ({symbol})</label>
+                  {execPrice > 0 && (
+                    <span className="text-[9px] text-slate-600">
+                      Max: <span className="text-slate-500 tabular-nums">{maxSize >= 1000 ? maxSize.toFixed(2) : maxSize.toFixed(4)}</span>
+                    </span>
+                  )}
+                </div>
                 <input
                   type="number" value={size}
                   onChange={e => setSize(e.target.value)}
@@ -206,6 +237,23 @@ export function OrderForm({ symbol }: Props) {
                   className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-accent tabular-nums"
                   step="any" min="0"
                 />
+                {/* Quick size buttons */}
+                {execPrice > 0 && (
+                  <div className="flex gap-1 mt-1">
+                    {[25, 50, 75, 100].map(pct => {
+                      const sz = maxSize * (pct / 100);
+                      const formatted = sz >= 1 ? sz.toFixed(2) : sz.toFixed(4);
+                      return (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => setSize(formatted)}
+                          className="flex-1 py-1 text-[9px] font-semibold rounded bg-bg-secondary border border-border/50 text-slate-500 hover:text-slate-300 hover:border-border transition-colors"
+                        >{pct}%</button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Total */}
@@ -219,8 +267,8 @@ export function OrderForm({ symbol }: Props) {
               {/* Margin required */}
               {total !== null && (
                 <div className="flex justify-between text-[10px]">
-                  <span className="text-slate-500">Margin (5x)</span>
-                  <span className="text-slate-300 tabular-nums">${fmtUsd(total / 5)}</span>
+                  <span className="text-slate-500">Margin ({selectedLeverage}x)</span>
+                  <span className="text-slate-300 tabular-nums">${fmtUsd(total / selectedLeverage)}</span>
                 </div>
               )}
 

@@ -71,6 +71,7 @@ model User {
   chatMessages  ChatMessage[]
   copyLeading   CopyFollow[]   @relation("copyLeader")
   copyFollowing CopyFollow[]   @relation("copyFollower")
+  strategies    Strategy[]
 
   @@index([apiKey])
   @@index([type, claimStatus])
@@ -231,4 +232,53 @@ model Notification {
 
   @@index([userId, read])
   @@index([createdAt(sort: Desc)])
+}
+
+enum StrategyStatus {
+  active
+  paused
+  stopped
+}
+
+model Strategy {
+  id                   String         @id @default(cuid())
+  userId               String
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                 String
+  description          String?
+  symbol               String
+  visibility           String         @default("public")
+  status               StrategyStatus @default(active)
+  config               Json
+  checkIntervalSeconds Int            @default(30)
+  lastCheckedAt        DateTime?
+  lastTriggeredAt      DateTime?
+  pauseReason          String?
+  totalTrades          Int            @default(0)
+  winCount             Int            @default(0)
+  totalPnl             Decimal        @default(0) @db.Decimal(20, 8)
+  maxDrawdown          Decimal        @default(0) @db.Decimal(20, 8)
+  forkedFromId         String?
+  forkedFrom           Strategy?      @relation("StrategyFork", fields: [forkedFromId], references: [id])
+  forks                Strategy[]     @relation("StrategyFork")
+  forkCount            Int            @default(0)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  logs                 StrategyLog[]
+
+  @@index([userId, status])
+  @@index([status, lastCheckedAt])
+  @@index([visibility, status])
+}
+
+model StrategyLog {
+  id          String   @id @default(cuid())
+  strategyId  String
+  strategy    Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  event       String
+  details     Json     @default("{}")
+  orderId     String?
+  createdAt   DateTime @default(now())
+
+  @@index([strategyId, createdAt])
 }
