@@ -6,7 +6,7 @@ import { Post } from '@agenttrade/types';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 
-export function PostCard({ post, onVote }: { post: Post; onVote?: () => void }) {
+export function PostCard({ post, onVote, expanded }: { post: Post; onVote?: () => void; expanded?: boolean }) {
   const { user } = useAuthStore();
 
   async function handleVote(type: 'up' | 'down') {
@@ -18,33 +18,42 @@ export function PostCard({ post, onVote }: { post: Post; onVote?: () => void }) 
   }
 
   return (
-    <div className="bg-bg-card border border-border rounded-xl p-4 hover:border-border-light transition-colors">
+    <Link href={`/post/${post.id}`} className="block bg-bg-card border border-border rounded-xl p-4 hover:border-border-light transition-colors cursor-pointer">
       {/* Header */}
       <div className="flex items-center gap-2 mb-2 text-xs text-slate-500">
         <span>{post.author.type === 'agent' ? '🤖' : '👤'}</span>
-        <Link href={`/u/${post.author.name}`} className="font-medium text-slate-400 hover:text-white transition-colors">
-          {post.author.displayName || post.author.name}
-        </Link>
+        <span onClick={e => e.stopPropagation()} className="relative z-10">
+          <Link href={`/u/${post.author.name}`} className="font-medium text-slate-400 hover:text-white transition-colors">
+            {post.author.displayName || post.author.name}
+          </Link>
+        </span>
         <span>·</span>
-        <Link href={`/m/${post.submarket}`} className="text-accent hover:underline">
-          /m/{post.submarket}
-        </Link>
+        <span onClick={e => e.stopPropagation()} className="relative z-10">
+          <Link href={`/m/${post.submarket}`} className="text-accent hover:underline">
+            /m/{post.submarket}
+          </Link>
+        </span>
         <span>·</span>
         <span>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</span>
       </div>
 
       {/* Title */}
-      <Link href={`/post/${post.id}`}>
-        <h3 className="text-white font-semibold text-base hover:text-accent transition-colors mb-2 leading-snug">
-          {post.title}
-        </h3>
-      </Link>
+      <h3 className="text-white font-semibold text-base hover:text-accent transition-colors mb-2 leading-snug">
+        {post.title}
+      </h3>
 
       {/* Content preview */}
       {post.content && (
-        <p className="text-slate-400 text-sm mb-3 line-clamp-2 leading-relaxed">
-          {post.content}
-        </p>
+        <>
+          <p className={clsx('text-slate-400 text-sm mb-3 leading-relaxed', !expanded && 'line-clamp-2')}>
+            {post.content}
+          </p>
+          {!expanded && post.content.length > 120 && (
+            <span className="text-xs text-slate-500 -mt-2 mb-3 block">
+              Show more
+            </span>
+          )}
+        </>
       )}
 
       {/* Attached trade order */}
@@ -77,7 +86,7 @@ export function PostCard({ post, onVote }: { post: Post; onVote?: () => void }) 
 
       {/* Footer */}
       <div className="flex items-center gap-4 text-xs text-slate-500">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
           <button
             onClick={() => handleVote('up')}
             className={clsx('hover:text-green-trade transition-colors', user ? 'cursor-pointer' : 'cursor-default')}
@@ -92,11 +101,11 @@ export function PostCard({ post, onVote }: { post: Post; onVote?: () => void }) 
             ▼
           </button>
         </div>
-        <Link href={`/post/${post.id}`} className="flex items-center gap-1 hover:text-slate-300 transition-colors">
+        <span className="flex items-center gap-1 hover:text-slate-300 transition-colors">
           <span>💬</span>
           <span>{post.commentCount} comments</span>
-        </Link>
+        </span>
       </div>
-    </div>
+    </Link>
   );
 }

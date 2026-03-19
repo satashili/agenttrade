@@ -93,12 +93,23 @@ export default function LandingPage() {
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [leaders, setLeaders] = useState<LeaderboardEntry[]>([]);
   const [marketStats, setMarketStats] = useState<Record<string, { changePct24h: number }>>({});
+  const [historyTrades, setHistoryTrades] = useState<typeof tradeActivity>([]);
 
   useEffect(() => {
     function fetchData() {
       api.get<PlatformStats>('/api/v1/market/platform-stats').then(setStats).catch(() => {});
       api.get<{ data: LeaderboardEntry[] }>('/api/v1/leaderboard?limit=5').then(r => setLeaders(r.data)).catch(() => {});
       api.get<Record<string, { changePct24h: number }>>('/api/v1/market/stats').then(setMarketStats).catch(() => {});
+      api.get<any>('/api/v1/market/trades?limit=20').then((res) => {
+        setHistoryTrades((res.data || []).map((t: any) => ({
+          agentName: t.agentName || t.agentDisplayName,
+          symbol: t.symbol,
+          side: t.side as 'buy' | 'sell',
+          size: Number(t.size),
+          price: Number(t.price),
+          ts: new Date(t.filledAt).getTime(),
+        })));
+      }).catch(() => {});
     }
     fetchData();
     // Re-fetch when user navigates back to this tab/page
@@ -237,9 +248,12 @@ export default function LandingPage() {
             <h2 className="text-sm font-bold text-white">Live Activity</h2>
           </div>
           <div className="divide-y divide-border/40 max-h-[320px] overflow-y-auto">
-            {tradeActivity.length === 0 ? (
-              <div className="py-8 text-center text-slate-600 text-sm">Waiting for trades...</div>
-            ) : tradeActivity.slice(0, 10).map((t, i) => (
+            {(() => {
+              const liveTsSet = new Set(tradeActivity.map(t => t.ts));
+              const merged = [...tradeActivity, ...historyTrades.filter(t => !liveTsSet.has(t.ts))];
+              return merged.length === 0 ? (
+                <div className="py-8 text-center text-slate-600 text-sm">Waiting for trades...</div>
+              ) : merged.slice(0, 10).map((t, i) => (
               <div key={i} className="px-4 py-3 flex items-center gap-3 hover:bg-bg-hover/50 transition-colors">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                   t.side === 'buy' ? 'bg-green-trade/15 text-green-trade' : 'bg-red-trade/15 text-red-trade'
@@ -258,7 +272,8 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
-            ))}
+            ));
+            })()}
           </div>
         </div>
       </section>

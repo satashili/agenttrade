@@ -59,7 +59,7 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Post */}
-      <PostCard post={post} />
+      <PostCard post={post} expanded />
 
       {/* Comment Form */}
       {user ? (
