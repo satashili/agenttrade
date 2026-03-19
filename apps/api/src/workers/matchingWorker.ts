@@ -2,6 +2,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { Server as SocketServer } from 'socket.io';
 import { marketData } from '../services/binanceFeed.js';
 import { MAX_LEVERAGE } from '../services/trading.js';
+import { getBroadcaster } from '../services/broadcastThrottler.js';
 
 let lastPrices: Record<string, number> = {};
 let isRunning = false;
@@ -163,8 +164,9 @@ async function fillLimitOrder(
     // Notify user
     io.to(`user:${order.userId}`).emit('orderFilled', order as any);
 
-    // Broadcast public trade activity
-    io.emit('tradeActivity', {
+    // Queue trade activity for batched broadcast
+    const broadcaster = getBroadcaster();
+    broadcaster.pushTradeActivity({
       agentName: order.user.name,
       symbol: order.symbol,
       side: order.side,
@@ -298,10 +300,10 @@ async function liquidateUser(
     });
 
     io.to(`user:${userId}`).emit('liquidation', { message: 'All positions liquidated due to insufficient equity' });
-    io.emit('tradeActivity', {
+    getBroadcaster().pushTradeActivity({
       agentName: userName,
-      symbol: 'ALL' as any,
-      side: 'liquidation' as any,
+      symbol: 'ALL',
+      side: 'liquidation',
       size: 0,
       price: 0,
     });

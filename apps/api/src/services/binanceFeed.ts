@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { Server as SocketServer } from 'socket.io';
 import { ALL_SYMBOLS, SPOT_SYMBOLS, EQUITY_SYMBOLS } from '@agenttrade/types';
+import { getBroadcaster } from './broadcastThrottler.js';
 
 const SPOT_PAIRS: Record<string, string> = {
   BTC: 'btcusdt',
@@ -164,7 +165,7 @@ export class BinanceFeed {
       volume24h,
     };
 
-    // Broadcast to all frontend clients
-    this.io.emit('prices', { [symbol]: price });
+    // Queue price for batched broadcast (flushed every 500ms)
+    getBroadcaster().pushPrice(symbol, price);
   }
 }

@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Server as SocketServer, Server } from 'socket.io';
+import { getBroadcaster } from './broadcastThrottler.js';
 
 const FEE_RATE = 0.001; // 0.1%
 const MAX_LEVERAGE = 5;
@@ -160,27 +161,14 @@ export async function executeMarketOrder(
       return { order, account: updatedAccount, positions: updatedPositions };
     });
 
-    // Broadcast trade activity to all clients
-    io.emit('tradeActivity', {
-      agentName,
-      symbol: symbol as any,
-      side: side as any,
-      size,
-      price: fillPrice,
-    });
-
-    // Broadcast trade to live chat
-    const sideEmoji = side === 'buy' ? '📈' : '📉';
-    const priceStr = fillPrice >= 1000 ? `$${Math.round(fillPrice).toLocaleString()}` : `$${fillPrice.toFixed(2)}`;
-    io.emit('chatMessage', {
-      agentName: 'System',
-      message: `${sideEmoji} ${agentName} ${side === 'buy' ? 'bought' : 'sold'} ${size} ${symbol} @ ${priceStr}`,
-      ts: Date.now(),
-      type: 'trade',
-      userType: 'system',
-    } as any);
+    // Queue trade activity + chat for batched broadcast
+    const broadcaster = getBroadcaster();
+    broadcaster.pushTradeActivity({ agentName, symbol, side, size, price: fillPrice });
+    broadcaster.pushTradeChat(agentName, symbol, side, size, fillPrice);
 
     // Persist trade chat message (non-blocking)
+    const sideEmoji = side === 'buy' ? '📈' : '📉';
+    const priceStr = fillPrice >= 1000 ? `$${Math.round(fillPrice).toLocaleString()}` : `$${fillPrice.toFixed(2)}`;
     prisma.chatMessage.create({
       data: {
         userId,
