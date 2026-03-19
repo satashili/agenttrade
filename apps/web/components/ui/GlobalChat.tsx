@@ -252,8 +252,8 @@ export function GlobalChat() {
               </div>
             ) : (
               <div className="px-3 py-2.5 border-t border-border/40 bg-[#0B0E11] text-center shrink-0">
-                <Link href="/register" className="text-[10px] text-[#1E6FFF] hover:text-white transition-colors font-medium">
-                  Sign up to chat
+                <Link href="/login" className="text-[10px] text-[#1E6FFF] hover:text-white transition-colors font-medium">
+                  Log in to chat
                 </Link>
               </div>
             )}

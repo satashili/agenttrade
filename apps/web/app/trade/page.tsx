@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { SymbolSidebar } from '@/components/trade/SymbolSidebar';
 import { CandleChart } from '@/components/charts/CandleChart';
 import { OrderBook } from '@/components/trade/OrderBook';
@@ -10,6 +10,7 @@ import { TickerBar } from '@/components/trade/TickerBar';
 import { StatusBar } from '@/components/trade/StatusBar';
 import { NewsTicker } from '@/components/trade/NewsTicker';
 import { MarketStats } from '@/components/trade/MarketStats';
+import { ResizeHandle } from '@/components/trade/ResizeHandle';
 
 type Sym = 'BTC' | 'ETH' | 'TSLA' | 'AMZN' | 'COIN' | 'MSTR' | 'INTC' | 'HOOD' | 'CRCL' | 'PLTR';
 type RightTab = 'orderbook' | 'stats';
@@ -17,6 +18,16 @@ type RightTab = 'orderbook' | 'stats';
 export default function TradePage() {
   const [symbol, setSymbol] = useState<Sym>('TSLA');
   const [rightTab, setRightTab] = useState<RightTab>('orderbook');
+  const [leftWidth, setLeftWidth] = useState(60);
+  const [rightWidth, setRightWidth] = useState(300);
+
+  const onResizeLeft = useCallback((delta: number) => {
+    setLeftWidth(w => Math.max(48, Math.min(200, w + delta)));
+  }, []);
+
+  const onResizeRight = useCallback((delta: number) => {
+    setRightWidth(w => Math.max(200, Math.min(500, w - delta)));
+  }, []);
 
   return (
     <div className="h-full flex flex-col bg-bg text-slate-200 overflow-hidden" style={{ overscrollBehaviorX: 'none', touchAction: 'pan-y' }}>
@@ -28,10 +39,14 @@ export default function TradePage() {
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left: Symbol list */}
-        <SymbolSidebar selectedSymbol={symbol} onSelect={setSymbol} />
+        <div style={{ width: leftWidth }} className="shrink-0">
+          <SymbolSidebar selectedSymbol={symbol} onSelect={setSymbol} />
+        </div>
+
+        <ResizeHandle onResize={onResizeLeft} />
 
         {/* Center: TickerBar + Chart + bottom panel */}
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden border-x border-border">
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
           <TickerBar symbol={symbol} />
           <div className="flex-1 min-h-0">
             <CandleChart symbol={symbol} />
@@ -39,8 +54,10 @@ export default function TradePage() {
           <BottomPanel symbol={symbol} />
         </div>
 
+        <ResizeHandle onResize={onResizeRight} />
+
         {/* Right: Tabbed panel */}
-        <div className="w-[300px] shrink-0 flex flex-col overflow-hidden bg-[#0B0E11]">
+        <div style={{ width: rightWidth }} className="shrink-0 flex flex-col overflow-hidden bg-[#0B0E11]">
           {/* Tab headers */}
           <div className="flex border-b border-border shrink-0 bg-[#12161c]">
             {([

@@ -148,7 +148,7 @@ export function BottomPanel({ symbol }: Props) {
       ]
     : [
         { id: 'activity', label: 'Activity', badge: allActivity.length || undefined },
-        { id: 'history', label: 'Recent Trades' },
+        { id: 'history', label: 'Trade History' },
         { id: 'positions', label: 'Leaderboard' },
       ];
 
@@ -191,12 +191,15 @@ export function BottomPanel({ symbol }: Props) {
           <>
             {/* AI Activity — always visible, merged real-time + historical */}
             {tab === 'activity' && (
-              <table className="w-full text-xs">
+              <table className="w-full text-xs" style={{ tableLayout: 'fixed' }}>
                 <thead className="sticky top-0 bg-bg-card z-10">
                   <tr className="text-[10px] text-slate-500 border-b border-border/50">
-                    {['Agent', 'Side', 'Symbol', 'Size', 'Price', 'Time'].map(h => (
-                      <th key={h} className={`px-3 py-1.5 font-normal ${h === 'Agent' ? 'text-left' : 'text-right'}`}>{h}</th>
-                    ))}
+                    <th className="px-3 py-1.5 font-normal text-left" style={{ width: '22%' }}>Agent</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '12%' }}>Side</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '14%' }}>Symbol</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '18%' }}>Size</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '18%' }}>Price</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '16%' }}>Time</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -222,12 +225,16 @@ export function BottomPanel({ symbol }: Props) {
 
             {/* Recent Trades (platform-wide for observers) / Order History (for agents) */}
             {tab === 'history' && !isLoggedIn && (
-              <table className="w-full text-xs">
+              <table className="w-full text-xs" style={{ tableLayout: 'fixed' }}>
                 <thead className="sticky top-0 bg-bg-card z-10">
                   <tr className="text-[10px] text-slate-500 border-b border-border/50">
-                    {['Agent', 'Symbol', 'Side', 'Size', 'Price', 'Value', 'Time'].map(h => (
-                      <th key={h} className={`px-3 py-1.5 font-normal ${h === 'Agent' ? 'text-left' : 'text-right'}`}>{h}</th>
-                    ))}
+                    <th className="px-3 py-1.5 font-normal text-left" style={{ width: '20%' }}>Agent</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '12%' }}>Symbol</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '10%' }}>Side</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '16%' }}>Size</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '16%' }}>Price</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '14%' }}>Value</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '12%' }}>Time</th>
                   </tr>
                 </thead>
                 <tbody>

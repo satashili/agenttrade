@@ -13,80 +13,89 @@ export function LeaderboardTable({ entries, compact = false }: { entries: Leader
   const rows = compact ? entries.slice(0, 5) : entries;
 
   return (
-    <div className="bg-bg-card rounded-xl border border-border overflow-hidden">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-slate-400 text-xs uppercase">
-            <th className="px-4 py-3 text-left">#</th>
-            <th className="px-4 py-3 text-left">Agent</th>
-            {!compact && <th className="px-4 py-3 text-right">Total Value</th>}
-            <th className="px-4 py-3 text-right">PnL</th>
-            {!compact && <th className="px-4 py-3 text-right">Trades</th>}
-            {!compact && <th className="px-4 py-3 text-right">Karma</th>}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {rows.map((entry) => {
-            const isUp = entry.totalPnlPct >= 0;
-            return (
-              <tr key={entry.rank} className="hover:bg-bg-hover transition-colors">
-                <td className="px-4 py-3 text-slate-400 tabular-nums">
-                  {entry.rank <= 3 ? (
-                    <span>{['🥇', '🥈', '🥉'][entry.rank - 1]}</span>
-                  ) : (
-                    entry.rank
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-7 h-7 rounded-full border flex items-center justify-center text-xs ${
-                      (entry.agent as any).type === 'human'
-                        ? 'bg-[#0ECB81]/10 border-[#0ECB81]/30'
-                        : 'bg-[#1E6FFF]/10 border-[#1E6FFF]/30'
-                    }`}>
-                      {(entry.agent as any).type === 'human' ? '👤' : '🤖'}
-                    </div>
-                    <div>
-                      <Link
-                        href={`/u/${entry.agent.name}`}
-                        className="font-medium text-white hover:text-accent transition-colors"
-                      >
-                        {entry.agent.displayName || entry.agent.name}
-                      </Link>
-                      {entry.agent.aiModel && !compact && (
-                        <div className={clsx(
-                          'text-xs px-1.5 py-0.5 rounded mt-0.5 inline-block',
-                          MODEL_BADGES[entry.agent.aiModel] || 'bg-slate-800 text-slate-400'
-                        )}>
-                          {entry.agent.aiModel}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </td>
-                {!compact && (
-                  <td className="px-4 py-3 text-right tabular-nums text-white">
-                    ${entry.totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                  </td>
+    <div className="space-y-2 max-w-3xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center px-4 py-2 text-xs text-slate-500 uppercase">
+        <span className="w-8 shrink-0">#</span>
+        <span className="flex-1">Agent</span>
+        {!compact && <span className="w-28 text-right">Total Value</span>}
+        <span className="w-20 text-right">PnL</span>
+        {!compact && <span className="w-16 text-right">Trades</span>}
+        {!compact && <span className="w-16 text-right">Karma</span>}
+      </div>
+
+      {/* Rows */}
+      {rows.map((entry) => {
+        const isUp = entry.totalPnlPct >= 0;
+        return (
+          <div
+            key={entry.rank}
+            className="flex items-center px-4 py-3 bg-bg-card rounded-xl border border-border hover:border-border-light transition-colors"
+          >
+            {/* Rank */}
+            <span className="w-8 shrink-0 text-sm text-slate-400 tabular-nums">
+              {entry.rank <= 3 ? (
+                <span>{['🥇', '🥈', '🥉'][entry.rank - 1]}</span>
+              ) : (
+                entry.rank
+              )}
+            </span>
+
+            {/* Agent */}
+            <div className="flex-1 min-w-0 flex items-center gap-2.5">
+              <div className={`w-8 h-8 rounded-full border flex items-center justify-center text-xs shrink-0 ${
+                (entry.agent as any).type === 'human'
+                  ? 'bg-[#0ECB81]/10 border-[#0ECB81]/30'
+                  : 'bg-[#1E6FFF]/10 border-[#1E6FFF]/30'
+              }`}>
+                {(entry.agent as any).type === 'human' ? '👤' : '🤖'}
+              </div>
+              <div className="min-w-0">
+                <Link
+                  href={`/u/${entry.agent.name}`}
+                  className="text-sm font-medium text-white hover:text-accent transition-colors truncate block"
+                >
+                  {entry.agent.displayName || entry.agent.name}
+                </Link>
+                {entry.agent.aiModel && !compact && (
+                  <span className={clsx(
+                    'text-[10px] px-1.5 py-0.5 rounded inline-block',
+                    MODEL_BADGES[entry.agent.aiModel] || 'bg-slate-800 text-slate-400'
+                  )}>
+                    {entry.agent.aiModel}
+                  </span>
                 )}
-                <td className={clsx('px-4 py-3 text-right tabular-nums font-medium', isUp ? 'text-green-trade' : 'text-red-trade')}>
-                  {isUp ? '+' : ''}{entry.totalPnlPct.toFixed(2)}%
-                </td>
-                {!compact && (
-                  <td className="px-4 py-3 text-right text-slate-400 tabular-nums">
-                    {entry.tradeCount}
-                  </td>
-                )}
-                {!compact && (
-                  <td className="px-4 py-3 text-right text-slate-400 tabular-nums">
-                    {entry.agent.karma}
-                  </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+              </div>
+            </div>
+
+            {/* Total Value */}
+            {!compact && (
+              <span className="w-28 text-right text-sm tabular-nums text-white">
+                ${entry.totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+              </span>
+            )}
+
+            {/* PnL */}
+            <span className={clsx('w-20 text-right text-sm tabular-nums font-medium', isUp ? 'text-green-trade' : 'text-red-trade')}>
+              {isUp ? '+' : ''}{entry.totalPnlPct.toFixed(2)}%
+            </span>
+
+            {/* Trades */}
+            {!compact && (
+              <span className="w-16 text-right text-sm text-slate-400 tabular-nums">
+                {entry.tradeCount}
+              </span>
+            )}
+
+            {/* Karma */}
+            {!compact && (
+              <span className="w-16 text-right text-sm text-slate-400 tabular-nums">
+                {entry.agent.karma}
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

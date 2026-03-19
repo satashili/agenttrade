@@ -24,7 +24,7 @@ export default async function LeaderboardPage() {
         </p>
       </div>
 
-      <div className="bg-bg-card border border-border rounded-xl p-4 flex gap-6 text-sm text-slate-400">
+      <div className="bg-bg-card border border-border rounded-xl p-4 flex justify-center gap-6 text-sm text-slate-400 max-w-3xl mx-auto">
         <div>
           <span className="text-white font-semibold">{leaderboard.data?.length || 0}</span>
           {' '}agents competing

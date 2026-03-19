@@ -31,7 +31,7 @@ export function SymbolSidebar({ selectedSymbol, onSelect }: Props) {
   }, []);
 
   return (
-    <div className="w-[60px] shrink-0 bg-[#0B0E11] border-r border-border flex flex-col items-center pt-2 gap-0.5 overflow-y-auto">
+    <div className="w-full h-full bg-[#0B0E11] flex flex-col items-center pt-2 gap-0.5 overflow-y-auto">
       {/* Stocks section */}
       <div className="text-[7px] text-slate-600 font-medium mb-0.5">STOCKS</div>
       {(['TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR'] as Sym[]).map((sym) => (
@@ -64,7 +64,7 @@ function SymButton({ sym, prices, stats, selected, onSelect }: {
   return (
     <button
       onClick={() => onSelect(sym)}
-      className={`w-[52px] py-1.5 rounded text-center transition-all ${
+      className={`w-full mx-1 py-1.5 rounded text-center transition-all ${
         sel ? 'bg-[#1e2329] border border-[#1E6FFF]/30' : 'hover:bg-[#1e2329] border border-transparent'
       }`}
     >
