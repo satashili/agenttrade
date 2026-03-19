@@ -4,6 +4,12 @@ import { useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
 import Link from 'next/link';
 
+interface StrategyPosition {
+  symbol: string;
+  size: number;
+  avgCost: number;
+}
+
 interface StrategyEntry {
   id: string;
   userId: string;
@@ -29,6 +35,11 @@ interface StrategyEntry {
   createdAt: string;
   lastTriggeredAt: string | null;
   pauseReason: string | null;
+  allocatedCapital?: number;
+  currentCash?: number;
+  initialEquity?: number;
+  pnlPct?: number;
+  positions?: StrategyPosition[];
 }
 
 type SortOption = 'pnl' | 'newest' | 'forks' | 'active';
@@ -71,7 +82,10 @@ export default function StrategiesPage() {
   const [sort, setSort] = useState<SortOption>('pnl');
   const [symbol, setSymbol] = useState('ALL');
   const [forkingId, setForkingId] = useState<string | null>(null);
+  const [forkFormId, setForkFormId] = useState<string | null>(null);
+  const [forkCapital, setForkCapital] = useState('');
   const [forkMsg, setForkMsg] = useState<{ id: string; msg: string; ok: boolean } | null>(null);
+  const [userBalance, setUserBalance] = useState<number | null>(null);
   const { token } = useAuthStore();
 
   const fetchData = useCallback(async () => {
@@ -85,16 +99,36 @@ export default function StrategiesPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  async function forkStrategy(id: string) {
+  async function openForkForm(id: string) {
     if (!token) {
       setForkMsg({ id, msg: 'Login required', ok: false });
       setTimeout(() => setForkMsg(null), 2000);
       return;
     }
+    setForkFormId(id);
+    setForkCapital('');
+    setForkMsg(null);
+    // Fetch user balance for reference
+    try {
+      const p: any = await api.get('/api/v1/portfolio');
+      setUserBalance(p.cashBalance || 0);
+    } catch {
+      setUserBalance(null);
+    }
+  }
+
+  async function confirmFork(id: string) {
+    const amount = parseFloat(forkCapital);
+    if (!amount || amount <= 0) {
+      setForkMsg({ id, msg: 'Enter a valid amount', ok: false });
+      setTimeout(() => setForkMsg(null), 2000);
+      return;
+    }
     setForkingId(id);
     try {
-      await api.post(`/api/v1/strategies/${id}/fork`, {});
+      await api.post(`/api/v1/strategies/${id}/fork`, { allocatedCapital: amount });
       setForkMsg({ id, msg: 'Forked!', ok: true });
+      setForkFormId(null);
       fetchData();
     } catch (err: any) {
       setForkMsg({ id, msg: err.message || 'Failed', ok: false });
@@ -211,11 +245,23 @@ export default function StrategiesPage() {
                     {summarizeEntry(s.config)}
                   </p>
 
+                  {/* Capital & Equity */}
+                  {s.allocatedCapital != null && (
+                    <div className="flex items-center gap-3 mb-3 text-[11px]">
+                      <span className="text-slate-500">Capital: <span className="text-slate-300 font-semibold">${s.allocatedCapital.toLocaleString()}</span></span>
+                      {s.currentCash != null && (
+                        <span className="text-slate-500">Equity: <span className="text-slate-300 font-semibold">
+                          ${(s.currentCash + (s.positions?.reduce((sum, p) => sum + Math.abs(p.size) * (p.avgCost || 0), 0) || 0)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </span></span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Stats */}
                   <div className="grid grid-cols-4 gap-1.5 mb-4">
                     <div className="bg-bg-secondary rounded-lg p-2 text-center">
-                      <div className={`text-sm font-bold tabular-nums ${s.totalPnl >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
-                        {s.totalPnl >= 0 ? '+' : ''}{s.totalPnl.toFixed(1)}%
+                      <div className={`text-sm font-bold tabular-nums ${(s.pnlPct ?? s.totalPnl) >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
+                        {(s.pnlPct ?? s.totalPnl) >= 0 ? '+' : ''}{(s.pnlPct ?? s.totalPnl).toFixed(1)}%
                       </div>
                       <div className="text-[9px] text-slate-600">PnL</div>
                     </div>
@@ -250,13 +296,46 @@ export default function StrategiesPage() {
                       View
                     </Link>
                     <button
-                      onClick={() => forkStrategy(s.id)}
+                      onClick={() => openForkForm(s.id)}
                       disabled={forkingId === s.id}
                       className="flex-1 py-2 rounded-lg text-xs font-bold bg-[#1E6FFF] hover:bg-[#1558CC] text-white shadow-md shadow-[#1E6FFF]/20 transition-all disabled:opacity-50"
                     >
                       {forkingId === s.id ? '...' : 'Fork'}
                     </button>
                   </div>
+
+                  {/* Inline fork form */}
+                  {forkFormId === s.id && (
+                    <div className="mt-3 bg-bg-secondary border border-border rounded-lg p-3">
+                      <div className="text-[11px] text-slate-400 mb-2">Allocate capital for this strategy</div>
+                      {userBalance != null && (
+                        <div className="text-[10px] text-slate-600 mb-2">Your balance: ${userBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                      )}
+                      <input
+                        type="number"
+                        placeholder="Amount (e.g. 10000)"
+                        value={forkCapital}
+                        onChange={(e) => setForkCapital(e.target.value)}
+                        className="w-full bg-bg-card border border-border rounded px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#1E6FFF]/50 mb-2 tabular-nums"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => confirmFork(s.id)}
+                          disabled={forkingId === s.id}
+                          className="flex-1 py-1.5 rounded text-xs font-bold bg-[#1E6FFF] hover:bg-[#1558CC] text-white transition-all disabled:opacity-50"
+                        >
+                          {forkingId === s.id ? 'Forking...' : 'Confirm Fork'}
+                        </button>
+                        <button
+                          onClick={() => { setForkFormId(null); setForkMsg(null); }}
+                          className="flex-1 py-1.5 rounded text-xs font-bold bg-bg-card border border-border text-slate-400 hover:text-white transition-all"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {forkMsg && forkMsg.id === s.id && (
                     <div className={`text-[10px] mt-1.5 text-center ${forkMsg.ok ? 'text-green-trade' : 'text-red-trade'}`}>
                       {forkMsg.msg}

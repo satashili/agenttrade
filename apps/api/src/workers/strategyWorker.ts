@@ -1,7 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Server as SocketServer } from 'socket.io';
 import { marketData } from '../services/binanceFeed.js';
-import { executeMarketOrder } from '../services/trading.js';
+import { executeStrategyOrder } from '../services/strategyTrading.js';
 import {
   fetchKlines,
   evaluateEntryConditions,
@@ -35,6 +35,7 @@ export function startStrategyWorker(prisma: PrismaClient, io: SocketServer) {
         },
         include: {
           user: { select: { id: true, name: true } },
+          positions: true,
         },
       });
 
@@ -121,20 +122,16 @@ async function processStrategy(
     return;
   }
 
-  // Check current position
-  const position = await prisma.position.findUnique({
-    where: { userId_symbol: { userId: strategy.userId, symbol: strategy.symbol } },
-  });
-  const positionSize = position ? parseFloat(position.size.toString()) : 0;
-  const avgCost = position ? parseFloat(position.avgCost.toString()) : 0;
+  // Check current strategy position (use included positions)
+  const strategyPositions = strategy.positions || [];
+  const posRecord = strategyPositions.find((p: any) => p.symbol === strategy.symbol);
+  const positionSize = posRecord ? parseFloat(posRecord.size.toString()) : 0;
+  const avgCost = posRecord ? parseFloat(posRecord.avgCost.toString()) : 0;
 
-  // Get user's equity for position sizing
-  const account = await prisma.account.findUnique({ where: { userId: strategy.userId } });
-  if (!account) return;
-  const cashBalance = parseFloat(account.cashBalance.toString());
-  const allPositions = await prisma.position.findMany({ where: { userId: strategy.userId } });
-  let equity = cashBalance;
-  for (const p of allPositions) {
+  // Calculate strategy equity for position sizing
+  const currentCash = parseFloat(strategy.currentCash.toString());
+  let equity = currentCash;
+  for (const p of strategyPositions) {
     const sz = parseFloat(p.size.toString());
     const pr = prices[p.symbol] || parseFloat(p.avgCost.toString());
     equity += sz * pr;
@@ -157,8 +154,9 @@ async function processStrategy(
         return;
       }
 
-      const result = await executeMarketOrder(
+      const result = await executeStrategyOrder(
         prisma,
+        strategy.id,
         strategy.userId,
         strategy.symbol,
         config.entryAction.side,
@@ -180,7 +178,7 @@ async function processStrategy(
               price: currentPrice,
               reason: 'entry_conditions_met',
             },
-            orderId: result.data?.order?.id || null,
+            orderId: result.orderId || null,
           },
         });
 
@@ -221,8 +219,9 @@ async function processStrategy(
       const closeSide = positionSize > 0 ? 'sell' : 'buy';
       const closeSize = Math.abs(positionSize);
 
-      const result = await executeMarketOrder(
+      const result = await executeStrategyOrder(
         prisma,
+        strategy.id,
         strategy.userId,
         strategy.symbol,
         closeSide as 'buy' | 'sell',
@@ -251,7 +250,7 @@ async function processStrategy(
               reason: exitResult.reason,
               pnl: tradePnl,
             },
-            orderId: result.data?.order?.id || null,
+            orderId: result.orderId || null,
           },
         });
 

@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { authenticate } from '../middleware/auth.js';
 import { ALL_SYMBOLS } from '@agenttrade/types';
+import { marketData } from '../services/binanceFeed.js';
 import type { CreateStrategyRequest } from '@agenttrade/types';
 
 const MAX_STRATEGIES_PER_USER = 3;
@@ -10,7 +11,13 @@ const VALID_INDICATORS = ['price', 'sma', 'ema', 'rsi', 'macd', 'bollinger', 'at
 const VALID_OPERATORS = ['<', '>', '<=', '>=', 'crosses_above', 'crosses_below'];
 
 function serializeStrategy(s: any): any {
-  return {
+  const allocatedCapital = parseFloat(s.allocatedCapital?.toString() || '0');
+  const currentCash = parseFloat(s.currentCash?.toString() || '0');
+  const initialEquity = parseFloat(s.initialEquity?.toString() || '0');
+  const totalPnl = parseFloat(s.totalPnl?.toString() || '0');
+  const pnlPct = initialEquity > 0 ? (totalPnl / initialEquity) * 100 : 0;
+
+  const result: any = {
     id: s.id,
     userId: s.userId,
     userName: s.user?.name || '',
@@ -28,12 +35,27 @@ function serializeStrategy(s: any): any {
     pauseReason: s.pauseReason,
     totalTrades: s.totalTrades,
     winCount: s.winCount,
-    totalPnl: parseFloat(s.totalPnl?.toString() || '0'),
+    totalPnl,
     maxDrawdown: parseFloat(s.maxDrawdown?.toString() || '0'),
     forkedFromId: s.forkedFromId,
     forkCount: s.forkCount,
     createdAt: s.createdAt?.toISOString(),
+    allocatedCapital,
+    currentCash,
+    initialEquity,
+    pnlPct: parseFloat(pnlPct.toFixed(4)),
   };
+
+  // Include positions if present
+  if (s.positions && Array.isArray(s.positions)) {
+    result.positions = s.positions.map((p: any) => ({
+      symbol: p.symbol,
+      size: parseFloat(p.size?.toString() || '0'),
+      avgCost: parseFloat(p.avgCost?.toString() || '0'),
+    }));
+  }
+
+  return result;
 }
 
 function validateConfig(body: CreateStrategyRequest): string | null {
@@ -51,6 +73,7 @@ function validateConfig(body: CreateStrategyRequest): string | null {
   if (typeof body.entryAction.size !== 'number' || body.entryAction.size <= 0) return 'entryAction.size must be > 0';
   if (!body.exitConditions) return 'exitConditions required';
   if (body.checkIntervalSeconds !== undefined && body.checkIntervalSeconds < MIN_CHECK_INTERVAL) return `checkIntervalSeconds must be >= ${MIN_CHECK_INTERVAL}`;
+  if (typeof body.allocatedCapital !== 'number' || body.allocatedCapital <= 0) return 'allocatedCapital must be > 0';
   return null;
 }
 
@@ -73,26 +96,45 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: `Max ${MAX_STRATEGIES_PER_USER} active strategies allowed` });
     }
 
-    const strategy = await fastify.prisma.strategy.create({
-      data: {
-        userId: user.id,
-        name: body.name,
-        description: body.description || null,
-        symbol: body.symbol,
-        visibility: body.visibility || 'public',
-        config: {
-          entryConditions: body.entryConditions,
-          entryAction: body.entryAction,
-          exitConditions: body.exitConditions,
-          riskLimits: body.riskLimits || {},
-        } as unknown as Prisma.InputJsonValue,
-        checkIntervalSeconds: body.checkIntervalSeconds || 30,
-      },
-      include: { user: userInclude },
+    // Check user's main account has enough cash
+    const account = await fastify.prisma.account.findUnique({ where: { userId: user.id } });
+    if (!account) return reply.status(400).send({ error: 'Account not found' });
+    const cashBalance = parseFloat(account.cashBalance.toString());
+    if (cashBalance < body.allocatedCapital) {
+      return reply.status(400).send({ error: `Insufficient balance. Need: $${body.allocatedCapital.toFixed(2)}, Have: $${cashBalance.toFixed(2)}` });
+    }
+
+    // Deduct from main account and create strategy in a transaction
+    const strategy = await fastify.prisma.$transaction(async (tx) => {
+      await tx.account.update({
+        where: { userId: user.id },
+        data: { cashBalance: { decrement: new Prisma.Decimal(body.allocatedCapital) } },
+      });
+
+      return tx.strategy.create({
+        data: {
+          userId: user.id,
+          name: body.name,
+          description: body.description || null,
+          symbol: body.symbol,
+          visibility: body.visibility || 'public',
+          config: {
+            entryConditions: body.entryConditions,
+            entryAction: body.entryAction,
+            exitConditions: body.exitConditions,
+            riskLimits: body.riskLimits || {},
+          } as unknown as Prisma.InputJsonValue,
+          checkIntervalSeconds: body.checkIntervalSeconds || 30,
+          allocatedCapital: new Prisma.Decimal(body.allocatedCapital),
+          currentCash: new Prisma.Decimal(body.allocatedCapital),
+          initialEquity: new Prisma.Decimal(body.allocatedCapital),
+        },
+        include: { user: userInclude, positions: true },
+      });
     });
 
     await fastify.prisma.strategyLog.create({
-      data: { strategyId: strategy.id, event: 'created', details: {} },
+      data: { strategyId: strategy.id, event: 'created', details: { allocatedCapital: body.allocatedCapital } },
     });
 
     return reply.status(201).send(serializeStrategy(strategy));
@@ -103,7 +145,7 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
     const user = request.authUser!;
     const strategies = await fastify.prisma.strategy.findMany({
       where: { userId: user.id },
-      include: { user: userInclude },
+      include: { user: userInclude, positions: true },
       orderBy: { createdAt: 'desc' },
     });
     return reply.send({ data: strategies.map(serializeStrategy) });
@@ -112,8 +154,27 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
   // GET /strategies/explore — Public strategies
   fastify.get('/strategies/explore', async (request, reply) => {
     const { sort = 'pnl', symbol, limit = '20' } = request.query as any;
-    const where: any = { visibility: 'public', status: { in: ['active', 'paused'] } };
+    const where: any = {
+      visibility: 'public',
+      status: { in: ['active', 'paused'] },
+      forkedFromId: null,
+    };
     if (symbol && symbol !== 'ALL') where.symbol = symbol.toUpperCase();
+
+    const take = Math.min(parseInt(limit) || 20, 50);
+
+    if (sort === 'pnl') {
+      // Fetch all matching, compute pnlPct, sort in memory
+      const strategies = await fastify.prisma.strategy.findMany({
+        where,
+        include: { user: userInclude, positions: true },
+      });
+
+      const serialized = strategies.map(serializeStrategy);
+      serialized.sort((a: any, b: any) => (b.pnlPct || 0) - (a.pnlPct || 0));
+
+      return reply.send({ data: serialized.slice(0, take) });
+    }
 
     let orderBy: any;
     switch (sort) {
@@ -125,9 +186,9 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
 
     const strategies = await fastify.prisma.strategy.findMany({
       where,
-      include: { user: userInclude },
+      include: { user: userInclude, positions: true },
       orderBy,
-      take: Math.min(parseInt(limit) || 20, 50),
+      take,
     });
 
     return reply.send({ data: strategies.map(serializeStrategy) });
@@ -138,7 +199,7 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const strategy = await fastify.prisma.strategy.findUnique({
       where: { id },
-      include: { user: userInclude },
+      include: { user: userInclude, positions: true },
     });
     if (!strategy || strategy.visibility !== 'public') {
       return reply.status(404).send({ error: 'Strategy not found' });
@@ -151,7 +212,7 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const strategy = await fastify.prisma.strategy.findUnique({
       where: { id },
-      include: { user: userInclude },
+      include: { user: userInclude, positions: true },
     });
     if (!strategy || strategy.userId !== request.authUser!.id) {
       return reply.status(404).send({ error: 'Strategy not found' });
@@ -194,7 +255,7 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
     const updated = await fastify.prisma.strategy.update({
       where: { id },
       data: updateData,
-      include: { user: userInclude },
+      include: { user: userInclude, positions: true },
     });
     return reply.send(serializeStrategy(updated));
   });
@@ -213,7 +274,7 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
     const updated = await fastify.prisma.strategy.update({
       where: { id },
       data: { status: 'paused', pauseReason: 'manual' },
-      include: { user: userInclude },
+      include: { user: userInclude, positions: true },
     });
     await fastify.prisma.strategyLog.create({
       data: { strategyId: id, event: 'paused', details: { reason: 'manual' } },
@@ -235,7 +296,7 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
     const updated = await fastify.prisma.strategy.update({
       where: { id },
       data: { status: 'active', pauseReason: null },
-      include: { user: userInclude },
+      include: { user: userInclude, positions: true },
     });
     await fastify.prisma.strategyLog.create({
       data: { strategyId: id, event: 'resumed', details: {} },
@@ -246,19 +307,106 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
   // DELETE /strategies/:id — Stop strategy
   fastify.delete('/strategies/:id', { preHandler: [authenticate] }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const strategy = await fastify.prisma.strategy.findUnique({ where: { id } });
+    const strategy = await fastify.prisma.strategy.findUnique({
+      where: { id },
+      include: { positions: true },
+    });
     if (!strategy || strategy.userId !== request.authUser!.id) {
       return reply.status(404).send({ error: 'Strategy not found' });
     }
 
-    await fastify.prisma.strategy.update({
-      where: { id },
-      data: { status: 'stopped' },
+    const prices = marketData.getPrices();
+    const currentCash = parseFloat(strategy.currentCash.toString());
+
+    // Calculate total value of positions at current market price
+    let positionsValue = 0;
+    for (const pos of strategy.positions) {
+      const sz = parseFloat(pos.size.toString());
+      const price = prices[pos.symbol] || parseFloat(pos.avgCost.toString());
+      positionsValue += sz * price;
+    }
+
+    const finalFunds = currentCash + positionsValue;
+    const initialEquity = parseFloat(strategy.initialEquity.toString());
+
+    // Calculate profit sharing for forked strategies
+    let profitShare = 0;
+    let publisherId: string | null = null;
+    if (strategy.forkedFromId && finalFunds > initialEquity) {
+      const sourceStrategy = await fastify.prisma.strategy.findUnique({
+        where: { id: strategy.forkedFromId },
+        select: { userId: true },
+      });
+      if (sourceStrategy) {
+        const profit = finalFunds - initialEquity;
+        profitShare = profit * 0.10;
+        publisherId = sourceStrategy.userId;
+      }
+    }
+
+    const fundsToUser = finalFunds - profitShare;
+
+    // Return funds to main account, delete positions, stop strategy
+    await fastify.prisma.$transaction(async (tx) => {
+      // Return funds to user's main account (minus profit share)
+      if (fundsToUser > 0) {
+        await tx.account.update({
+          where: { userId: strategy.userId },
+          data: { cashBalance: { increment: new Prisma.Decimal(fundsToUser) } },
+        });
+      }
+
+      // Pay profit share to strategy publisher
+      if (profitShare > 0 && publisherId) {
+        await tx.account.update({
+          where: { userId: publisherId },
+          data: { cashBalance: { increment: new Prisma.Decimal(profitShare) } },
+        });
+
+        await tx.profitShare.create({
+          data: {
+            fromUserId: strategy.userId,
+            toUserId: publisherId,
+            amount: new Prisma.Decimal(profitShare),
+            type: 'fork',
+            strategyId: strategy.forkedFromId!,
+            totalProfit: new Prisma.Decimal(finalFunds - initialEquity),
+            shareRate: new Prisma.Decimal(0.10),
+          },
+        });
+      }
+
+      // Delete strategy positions
+      await tx.strategyPosition.deleteMany({ where: { strategyId: id } });
+
+      // Stop the strategy
+      await tx.strategy.update({
+        where: { id },
+        data: { status: 'stopped', currentCash: new Prisma.Decimal(0) },
+      });
     });
+
+    // Notify publisher about profit share
+    if (profitShare > 0 && publisherId) {
+      await fastify.prisma.notification.create({
+        data: {
+          userId: publisherId,
+          type: 'profit_share',
+          message: `You earned $${profitShare.toFixed(2)} (10% profit share) from a forked strategy being stopped`,
+          resourceId: strategy.forkedFromId!,
+        },
+      }).catch(() => {});
+    }
+
     await fastify.prisma.strategyLog.create({
-      data: { strategyId: id, event: 'stopped', details: {} },
+      data: {
+        strategyId: id,
+        event: 'stopped',
+        details: { finalFunds, positionsValue, cashReturned: fundsToUser, profitShare, publisherId },
+      },
     });
-    return reply.send({ success: true });
+
+    return reply.send({ success: true, fundsReturned: fundsToUser, profitShare });
   });
 
   // GET /strategies/:id/logs
@@ -291,10 +439,15 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
   fastify.post('/strategies/:id/fork', { preHandler: [authenticate] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const user = request.authUser!;
+    const body = request.body as { allocatedCapital?: number };
 
     const source = await fastify.prisma.strategy.findUnique({ where: { id } });
     if (!source || source.visibility !== 'public') {
       return reply.status(404).send({ error: 'Strategy not found' });
+    }
+
+    if (typeof body.allocatedCapital !== 'number' || body.allocatedCapital <= 0) {
+      return reply.status(400).send({ error: 'allocatedCapital must be > 0' });
     }
 
     // Check max strategies
@@ -305,24 +458,49 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: `Max ${MAX_STRATEGIES_PER_USER} active strategies allowed` });
     }
 
-    const forked = await fastify.prisma.strategy.create({
-      data: {
-        userId: user.id,
-        name: `${source.name} (fork)`,
-        description: source.description,
-        symbol: source.symbol,
-        visibility: 'public',
-        config: source.config as any,
-        checkIntervalSeconds: source.checkIntervalSeconds,
-        forkedFromId: source.id,
-      },
-      include: { user: userInclude },
-    });
+    // Check user's main account has enough cash
+    const account = await fastify.prisma.account.findUnique({ where: { userId: user.id } });
+    if (!account) return reply.status(400).send({ error: 'Account not found' });
+    const cashBalance = parseFloat(account.cashBalance.toString());
+    if (cashBalance < body.allocatedCapital) {
+      return reply.status(400).send({ error: `Insufficient balance. Need: $${body.allocatedCapital.toFixed(2)}, Have: $${cashBalance.toFixed(2)}` });
+    }
 
-    // Increment fork count on source
-    await fastify.prisma.strategy.update({
-      where: { id: source.id },
-      data: { forkCount: { increment: 1 } },
+    const forked = await fastify.prisma.$transaction(async (tx) => {
+      // Deduct from main account
+      await tx.account.update({
+        where: { userId: user.id },
+        data: { cashBalance: { decrement: new Prisma.Decimal(body.allocatedCapital!) } },
+      });
+
+      // Create forked strategy with fresh stats
+      const created = await tx.strategy.create({
+        data: {
+          userId: user.id,
+          name: `${source.name} (fork)`,
+          description: source.description,
+          symbol: source.symbol,
+          visibility: 'public',
+          config: source.config as any,
+          checkIntervalSeconds: source.checkIntervalSeconds,
+          forkedFromId: source.id,
+          allocatedCapital: new Prisma.Decimal(body.allocatedCapital!),
+          currentCash: new Prisma.Decimal(body.allocatedCapital!),
+          initialEquity: new Prisma.Decimal(body.allocatedCapital!),
+          totalTrades: 0,
+          winCount: 0,
+          totalPnl: new Prisma.Decimal(0),
+        },
+        include: { user: userInclude, positions: true },
+      });
+
+      // Increment fork count on source
+      await tx.strategy.update({
+        where: { id: source.id },
+        data: { forkCount: { increment: 1 } },
+      });
+
+      return created;
     });
 
     return reply.status(201).send(serializeStrategy(forked));

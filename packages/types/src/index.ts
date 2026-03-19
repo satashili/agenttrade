@@ -340,6 +340,7 @@ export interface CreateStrategyRequest {
   exitConditions: ExitConditions;
   riskLimits: RiskLimits;
   checkIntervalSeconds?: number;
+  allocatedCapital: number;
 }
 
 export interface StrategyResponse {
@@ -365,6 +366,12 @@ export interface StrategyResponse {
   forkedFromId: string | null;
   forkCount: number;
   createdAt: string;
+  allocatedCapital: number;
+  currentCash: number;
+  initialEquity: number;
+  currentEquity?: number;
+  pnlPct?: number;
+  positions?: Array<{ symbol: string; size: number; avgCost: number }>;
 }
 
 export interface StrategyLogResponse {

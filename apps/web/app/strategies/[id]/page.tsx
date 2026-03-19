@@ -1,9 +1,15 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useMarketStore } from '@/lib/store';
 import { api } from '@/lib/api';
 import Link from 'next/link';
+
+interface StrategyPosition {
+  symbol: string;
+  size: number;
+  avgCost: number;
+}
 
 interface StrategyDetail {
   id: string;
@@ -30,6 +36,11 @@ interface StrategyDetail {
   createdAt: string;
   lastTriggeredAt: string | null;
   pauseReason: string | null;
+  allocatedCapital?: number;
+  currentCash?: number;
+  initialEquity?: number;
+  pnlPct?: number;
+  positions?: StrategyPosition[];
   logs?: Array<{ id: string; action: string; result: string; createdAt: string; details?: string }>;
 }
 
@@ -108,32 +119,65 @@ export default function StrategyDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [forkingId, setForkingId] = useState(false);
+  const [forkFormOpen, setForkFormOpen] = useState(false);
+  const [forkCapital, setForkCapital] = useState('');
   const [forkMsg, setForkMsg] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [userBalance, setUserBalance] = useState<number | null>(null);
   const { token, user } = useAuthStore();
+  const prices = useMarketStore((s) => s.prices);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res: any = await api.get(`/api/v1/strategies/explore/${id}`);
+      // Try authenticated endpoint first (works for owner), fall back to public
+      let res: any;
+      if (token) {
+        try {
+          res = await api.get(`/api/v1/strategies/${id}`);
+        } catch {
+          res = await api.get(`/api/v1/strategies/explore/${id}`);
+        }
+      } else {
+        res = await api.get(`/api/v1/strategies/explore/${id}`);
+      }
       setStrategy(res.data || res);
     } catch (err: any) {
       setError(err.message || 'Failed to load strategy');
     }
     setLoading(false);
-  }, [id]);
+  }, [id, token]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  async function forkStrategy() {
+  async function openForkForm() {
     if (!token) {
       setForkMsg({ msg: 'Login required', ok: false });
       setTimeout(() => setForkMsg(null), 2000);
       return;
     }
+    setForkFormOpen(true);
+    setForkCapital('');
+    setForkMsg(null);
+    try {
+      const p: any = await api.get('/api/v1/portfolio');
+      setUserBalance(p.cashBalance || 0);
+    } catch {
+      setUserBalance(null);
+    }
+  }
+
+  async function confirmFork() {
+    const amount = parseFloat(forkCapital);
+    if (!amount || amount <= 0) {
+      setForkMsg({ msg: 'Enter a valid amount', ok: false });
+      setTimeout(() => setForkMsg(null), 2000);
+      return;
+    }
     setForkingId(true);
     try {
-      await api.post(`/api/v1/strategies/${id}/fork`, {});
+      await api.post(`/api/v1/strategies/${id}/fork`, { allocatedCapital: amount });
       setForkMsg({ msg: 'Strategy forked to your account!', ok: true });
+      setForkFormOpen(false);
       fetchData();
     } catch (err: any) {
       setForkMsg({ msg: err.message || 'Failed to fork', ok: false });
@@ -166,6 +210,14 @@ export default function StrategyDetailPage() {
   const exitLines = renderExitConditions(strategy.config);
   const riskLines = renderRiskLimits(strategy.config);
   const isOwner = user?.id === strategy.userId;
+
+  // Compute current equity from positions + cash
+  const positionValue = strategy.positions?.reduce((sum, p) => {
+    const currentPrice = prices[p.symbol] ?? p.avgCost;
+    return sum + Math.abs(p.size) * currentPrice;
+  }, 0) ?? 0;
+  const currentEquity = strategy.currentCash != null ? strategy.currentCash + positionValue : null;
+  const pnl = strategy.pnlPct ?? strategy.totalPnl;
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -206,18 +258,96 @@ export default function StrategyDetailPage() {
             </div>
           </div>
 
-          {!isOwner && (
-            <button
-              onClick={forkStrategy}
-              disabled={forkingId}
-              className="px-6 py-2.5 bg-gradient-to-r from-[#1E6FFF] to-[#1558CC] hover:from-[#1558CC] hover:to-[#0d47a1] text-white font-bold text-sm rounded-lg shadow-lg shadow-[#1E6FFF]/20 transition-all hover:scale-105 disabled:opacity-50 shrink-0"
-            >
-              {forkingId ? 'Forking...' : 'Fork Strategy'}
-            </button>
-          )}
+          <div className="flex gap-2 shrink-0">
+            {/* Owner controls */}
+            {isOwner && strategy.status === 'active' && (
+              <button
+                onClick={async () => {
+                  try {
+                    await api.post(`/api/v1/strategies/${id}/pause`, {});
+                    fetchData();
+                  } catch (err: any) { setError(err.message); }
+                }}
+                className="px-4 py-2.5 bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/20 text-yellow-400 font-bold text-sm rounded-lg transition-all"
+              >
+                Pause
+              </button>
+            )}
+            {isOwner && strategy.status === 'paused' && (
+              <button
+                onClick={async () => {
+                  try {
+                    await api.post(`/api/v1/strategies/${id}/resume`, {});
+                    fetchData();
+                  } catch (err: any) { setError(err.message); }
+                }}
+                className="px-4 py-2.5 bg-[#0ECB81]/10 border border-[#0ECB81]/30 hover:bg-[#0ECB81]/20 text-[#0ECB81] font-bold text-sm rounded-lg transition-all"
+              >
+                Resume
+              </button>
+            )}
+            {isOwner && strategy.status !== 'stopped' && (
+              <button
+                onClick={async () => {
+                  if (!confirm('Stop this strategy? Positions will be closed and funds returned to your account.')) return;
+                  try {
+                    const res: any = await api.delete(`/api/v1/strategies/${id}`);
+                    setForkMsg({ msg: `Strategy stopped. $${(res.fundsReturned || 0).toLocaleString()} returned to your account.`, ok: true });
+                    fetchData();
+                  } catch (err: any) { setError(err.message); }
+                }}
+                className="px-4 py-2.5 bg-[#F6465D]/10 border border-[#F6465D]/30 hover:bg-[#F6465D]/20 text-[#F6465D] font-bold text-sm rounded-lg transition-all"
+              >
+                Stop
+              </button>
+            )}
+            {/* Fork button (non-owners) */}
+            {!isOwner && strategy.status !== 'stopped' && (
+              <button
+                onClick={openForkForm}
+                disabled={forkingId}
+                className="px-6 py-2.5 bg-gradient-to-r from-[#1E6FFF] to-[#1558CC] hover:from-[#1558CC] hover:to-[#0d47a1] text-white font-bold text-sm rounded-lg shadow-lg shadow-[#1E6FFF]/20 transition-all hover:scale-105 disabled:opacity-50"
+              >
+                {forkingId ? 'Forking...' : 'Fork Strategy'}
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Inline fork form */}
+        {forkFormOpen && (
+          <div className="mt-4 bg-bg-secondary border border-border rounded-lg p-4">
+            <div className="text-sm text-slate-400 mb-2">Allocate capital for this strategy</div>
+            {userBalance != null && (
+              <div className="text-xs text-slate-600 mb-2">Your balance: ${userBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+            )}
+            <input
+              type="number"
+              placeholder="Amount (e.g. 10000)"
+              value={forkCapital}
+              onChange={(e) => setForkCapital(e.target.value)}
+              className="w-full max-w-xs bg-bg-card border border-border rounded px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-[#1E6FFF]/50 mb-3 tabular-nums"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={confirmFork}
+                disabled={forkingId}
+                className="px-5 py-2 rounded-lg text-xs font-bold bg-[#1E6FFF] hover:bg-[#1558CC] text-white transition-all disabled:opacity-50"
+              >
+                {forkingId ? 'Forking...' : 'Confirm Fork'}
+              </button>
+              <button
+                onClick={() => { setForkFormOpen(false); setForkMsg(null); }}
+                className="px-5 py-2 rounded-lg text-xs font-bold bg-bg-card border border-border text-slate-400 hover:text-white transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {forkMsg && (
-          <div className={`text-sm ${forkMsg.ok ? 'text-green-trade' : 'text-red-trade'}`}>
+          <div className={`text-sm mt-2 ${forkMsg.ok ? 'text-green-trade' : 'text-red-trade'}`}>
             {forkMsg.msg}
           </div>
         )}
@@ -231,19 +361,33 @@ export default function StrategyDetailPage() {
       {/* Stats grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
-          <div className={`text-xl font-bold tabular-nums ${strategy.totalPnl >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
-            {strategy.totalPnl >= 0 ? '+' : ''}{strategy.totalPnl.toFixed(2)}%
+          <div className={`text-xl font-bold tabular-nums ${pnl >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
+            {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}%
           </div>
-          <div className="text-[10px] text-slate-600 mt-1">Total PnL</div>
+          <div className="text-[10px] text-slate-600 mt-1">PnL</div>
         </div>
-        <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
-          <div className="text-xl font-bold text-white tabular-nums">{strategy.totalTrades}</div>
-          <div className="text-[10px] text-slate-600 mt-1">Total Trades</div>
-        </div>
-        <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
-          <div className="text-xl font-bold text-white tabular-nums">{winRate.toFixed(1)}%</div>
-          <div className="text-[10px] text-slate-600 mt-1">Win Rate</div>
-        </div>
+        {strategy.allocatedCapital != null ? (
+          <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
+            <div className="text-xl font-bold text-white tabular-nums">${strategy.allocatedCapital.toLocaleString()}</div>
+            <div className="text-[10px] text-slate-600 mt-1">Capital</div>
+          </div>
+        ) : (
+          <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
+            <div className="text-xl font-bold text-white tabular-nums">{strategy.totalTrades}</div>
+            <div className="text-[10px] text-slate-600 mt-1">Total Trades</div>
+          </div>
+        )}
+        {currentEquity != null ? (
+          <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
+            <div className="text-xl font-bold text-white tabular-nums">${currentEquity.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+            <div className="text-[10px] text-slate-600 mt-1">Current Equity</div>
+          </div>
+        ) : (
+          <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
+            <div className="text-xl font-bold text-white tabular-nums">{winRate.toFixed(1)}%</div>
+            <div className="text-[10px] text-slate-600 mt-1">Win Rate</div>
+          </div>
+        )}
         <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
           <div className="text-xl font-bold text-white tabular-nums">{formatDuration(strategy.createdAt)}</div>
           <div className="text-[10px] text-slate-600 mt-1">Running</div>
@@ -251,20 +395,63 @@ export default function StrategyDetailPage() {
       </div>
 
       {/* Additional info row */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
+          <div className="text-lg font-bold text-white tabular-nums">{strategy.totalTrades}</div>
+          <div className="text-[10px] text-slate-600 mt-1">Trades</div>
+        </div>
+        <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
+          <div className="text-lg font-bold text-white tabular-nums">{winRate.toFixed(1)}%</div>
+          <div className="text-[10px] text-slate-600 mt-1">Win Rate</div>
+        </div>
         <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
           <div className="text-lg font-bold text-white tabular-nums">{strategy.forkCount}</div>
           <div className="text-[10px] text-slate-600 mt-1">Forks</div>
         </div>
         <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
           <div className="text-lg font-bold text-white tabular-nums">{strategy.checkIntervalSeconds}s</div>
-          <div className="text-[10px] text-slate-600 mt-1">Check Interval</div>
-        </div>
-        <div className="bg-bg-card border border-border rounded-xl p-4 text-center">
-          <div className="text-xs font-medium text-slate-400">{formatDate(strategy.createdAt)}</div>
-          <div className="text-[10px] text-slate-600 mt-1">Created</div>
+          <div className="text-[10px] text-slate-600 mt-1">Interval</div>
         </div>
       </div>
+
+      {/* Strategy Positions */}
+      {strategy.positions && strategy.positions.length > 0 && (
+        <div className="bg-bg-card border border-border rounded-xl p-6 mb-6">
+          <h2 className="text-white font-bold text-sm mb-4">Strategy Positions</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="py-2 pr-4 text-slate-600 font-medium">Symbol</th>
+                  <th className="py-2 pr-4 text-slate-600 font-medium text-right">Size</th>
+                  <th className="py-2 pr-4 text-slate-600 font-medium text-right">Avg Cost</th>
+                  <th className="py-2 pr-4 text-slate-600 font-medium text-right">Current Price</th>
+                  <th className="py-2 text-slate-600 font-medium text-right">Unrealized PnL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {strategy.positions.map((pos) => {
+                  const curPrice = prices[pos.symbol] ?? null;
+                  const unrealizedPnl = curPrice != null ? (curPrice - pos.avgCost) * pos.size : null;
+                  return (
+                    <tr key={pos.symbol} className="border-b border-border/50 hover:bg-white/[0.02]">
+                      <td className="py-2 pr-4 text-slate-300 font-medium">{pos.symbol}</td>
+                      <td className="py-2 pr-4 text-slate-300 tabular-nums text-right">{pos.size}</td>
+                      <td className="py-2 pr-4 text-slate-400 tabular-nums text-right">${pos.avgCost.toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
+                      <td className="py-2 pr-4 text-slate-300 tabular-nums text-right">
+                        {curPrice != null ? `$${curPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '--'}
+                      </td>
+                      <td className={`py-2 tabular-nums text-right font-medium ${unrealizedPnl != null ? (unrealizedPnl >= 0 ? 'text-green-trade' : 'text-red-trade') : 'text-slate-600'}`}>
+                        {unrealizedPnl != null ? `${unrealizedPnl >= 0 ? '+' : ''}$${unrealizedPnl.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '--'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Configuration */}
       <div className="bg-bg-card border border-border rounded-xl p-6 mb-6">

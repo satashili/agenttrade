@@ -72,6 +72,8 @@ model User {
   copyLeading   CopyFollow[]   @relation("copyLeader")
   copyFollowing CopyFollow[]   @relation("copyFollower")
   strategies    Strategy[]
+  profitSharesFrom ProfitShare[] @relation("profitShareFrom")
+  profitSharesTo   ProfitShare[] @relation("profitShareTo")
 
   @@index([apiKey])
   @@index([type, claimStatus])
@@ -116,6 +118,8 @@ model Order {
   status    OrderStatus @default(pending)
   createdAt DateTime    @default(now())
   filledAt  DateTime?
+
+  strategyId String?
 
   attachedPost Post?
 
@@ -258,6 +262,9 @@ model Strategy {
   winCount             Int            @default(0)
   totalPnl             Decimal        @default(0) @db.Decimal(20, 8)
   maxDrawdown          Decimal        @default(0) @db.Decimal(20, 8)
+  allocatedCapital     Decimal        @default(0) @db.Decimal(20, 8)
+  currentCash          Decimal        @default(0) @db.Decimal(20, 8)
+  initialEquity        Decimal        @default(0) @db.Decimal(20, 8)
   forkedFromId         String?
   forkedFrom           Strategy?      @relation("StrategyFork", fields: [forkedFromId], references: [id])
   forks                Strategy[]     @relation("StrategyFork")
@@ -265,6 +272,7 @@ model Strategy {
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
   logs                 StrategyLog[]
+  positions            StrategyPosition[]
 
   @@index([userId, status])
   @@index([status, lastCheckedAt])
@@ -281,4 +289,33 @@ model StrategyLog {
   createdAt   DateTime @default(now())
 
   @@index([strategyId, createdAt])
+}
+
+model StrategyPosition {
+  id          String   @id @default(cuid())
+  strategyId  String
+  strategy    Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  symbol      String
+  size        Decimal  @default(0) @db.Decimal(20, 8)
+  avgCost     Decimal  @default(0) @db.Decimal(20, 8)
+
+  @@unique([strategyId, symbol])
+}
+
+model ProfitShare {
+  id          String   @id @default(uuid())
+  fromUserId  String
+  fromUser    User     @relation("profitShareFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId    String
+  toUser      User     @relation("profitShareTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  amount      Decimal  @db.Decimal(20, 8)
+  type        String   // "fork" or "copy_trade"
+  strategyId  String?
+  orderId     String?
+  totalProfit Decimal  @db.Decimal(20, 8)
+  shareRate   Decimal  @default(0.10) @db.Decimal(5, 4)
+  createdAt   DateTime @default(now())
+
+  @@index([fromUserId])
+  @@index([toUserId])
 }

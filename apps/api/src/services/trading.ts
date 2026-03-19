@@ -418,7 +418,7 @@ async function replicateToCopiers(
 
   for (const copier of copiers) {
     try {
-      // Get copier's equity
+      // Get copier's equity and current position (for PnL calc)
       const copierAccount = await prisma.account.findUnique({ where: { userId: copier.follower.id } });
       if (!copierAccount) continue;
       const copierCash = parseFloat(copierAccount.cashBalance.toString());
@@ -428,6 +428,11 @@ async function replicateToCopiers(
         copierEquity += parseFloat(p.size.toString()) * (prices[p.symbol] || 0);
       }
       if (copierEquity <= 0) continue;
+
+      // Check copier's position before trade (for realized PnL calculation)
+      const posBefore = copierPositions.find(p => p.symbol === symbol);
+      const sizeBefore = parseFloat(posBefore?.size.toString() || '0');
+      const avgCostBefore = parseFloat(posBefore?.avgCost.toString() || '0');
 
       // Proportional size
       const copierTradeValue = copierEquity * leaderProportion;
@@ -461,6 +466,60 @@ async function replicateToCopiers(
             message: `Copy trade: ${side.toUpperCase()} ${copierSize} ${symbol} @ $${fillPrice} (following ${leaderName})`,
           },
         }).catch(() => {});
+
+        // Calculate realized PnL from this copy trade for profit sharing
+        let realizedPnl = 0;
+        if (side === 'sell' && sizeBefore > 0) {
+          // Closing/reducing a long
+          const closed = Math.min(sizeBefore, copierSize);
+          realizedPnl = closed * (fillPrice - avgCostBefore);
+        } else if (side === 'buy' && sizeBefore < 0) {
+          // Closing/reducing a short
+          const closed = Math.min(Math.abs(sizeBefore), copierSize);
+          realizedPnl = closed * (avgCostBefore - fillPrice);
+        }
+
+        // If profitable, take 10% for the leader
+        if (realizedPnl > 0) {
+          const share = realizedPnl * 0.10;
+          try {
+            await prisma.$transaction(async (tx) => {
+              // Deduct from copier
+              await tx.account.update({
+                where: { userId: copier.follower.id },
+                data: { cashBalance: { decrement: new Prisma.Decimal(share) } },
+              });
+              // Credit to leader
+              await tx.account.update({
+                where: { userId: leaderId },
+                data: { cashBalance: { increment: new Prisma.Decimal(share) } },
+              });
+              // Record profit share
+              await tx.profitShare.create({
+                data: {
+                  fromUserId: copier.follower.id,
+                  toUserId: leaderId,
+                  amount: new Prisma.Decimal(share),
+                  type: 'copy_trade',
+                  orderId: result.data?.order?.id || null,
+                  totalProfit: new Prisma.Decimal(realizedPnl),
+                  shareRate: new Prisma.Decimal(0.10),
+                },
+              });
+            });
+
+            // Notify leader about profit share
+            await prisma.notification.create({
+              data: {
+                userId: leaderId,
+                type: 'profit_share',
+                message: `You earned $${share.toFixed(2)} (10% profit share) from ${copier.follower.name}'s copy trade`,
+              },
+            }).catch(() => {});
+          } catch (shareErr) {
+            console.error(`[CopyTrade] Profit share failed for ${copier.follower.name}:`, (shareErr as Error).message);
+          }
+        }
       }
     } catch (err) {
       // Non-critical: don't fail the leader's trade
