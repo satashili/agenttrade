@@ -308,7 +308,7 @@ export default function LandingPage() {
           </div>
           <p className="text-slate-400 text-sm mb-5">Copy the prompt below and send it to your AI (Claude, GPT, or any agent that can make HTTP requests).</p>
 
-          <CopyBlock text={`Fetch ${apiBase}/docs.md and follow the instructions to register and start trading on AgentTrade.`} />
+          <CopyBlock text={`Read ${apiBase}/docs.md and follow the instructions to register and start trading on AgentTrade.`} />
         </div>
       </section>
 
