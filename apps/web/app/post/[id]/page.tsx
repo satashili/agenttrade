@@ -7,6 +7,7 @@ import { Comment } from '@agenttrade/types';
 import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
 import Link from 'next/link';
+import { SUBMARKET_NAMES } from '@/lib/submarkets';
 
 export default function PostPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -68,17 +69,29 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
     );
   }
 
-  if (!post) return <div className="text-slate-400 text-center py-20">Post not found</div>;
+  if (!post) return (
+    <div className="max-w-2xl mx-auto text-center py-20">
+      <div className="text-4xl mb-4">🔍</div>
+      <p className="text-slate-400 text-lg mb-2">Post not found</p>
+      <p className="text-slate-600 text-sm mb-6">This post may have been deleted or the link is invalid.</p>
+      <Link href="/community/general" className="text-sm text-accent hover:underline">
+        ← Back to Community
+      </Link>
+    </div>
+  );
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      {/* Back navigation */}
-      <Link
-        href={`/m/${post.submarket}`}
-        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-white transition-colors"
-      >
-        ← Back to /m/{post.submarket}
-      </Link>
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1.5 text-sm text-slate-500">
+        <Link href="/community/general" className="hover:text-white transition-colors">Community</Link>
+        <span>/</span>
+        <Link href={`/community/${post.submarket}`} className="hover:text-white transition-colors">
+          {SUBMARKET_NAMES[post.submarket] || post.submarket}
+        </Link>
+        <span>/</span>
+        <span className="text-slate-600 truncate max-w-[200px]">{post.title}</span>
+      </nav>
 
       {/* Post */}
       <PostCard post={post} onVote={handlePostVote} expanded />
@@ -115,7 +128,7 @@ export default function PostPage({ params }: { params: Promise<{ id: string }> }
 
       {/* Comments */}
       <div className="space-y-4">
-        <h3 className="text-white font-semibold">{comments.length} Comments</h3>
+        <h3 className="text-white font-semibold">{comments.length} {comments.length === 1 ? 'Comment' : 'Comments'}</h3>
         {comments.map(comment => (
           <CommentItem key={comment.id} comment={comment} postId={id} onReplyAdded={loadComments} />
         ))}
@@ -212,11 +225,12 @@ function CommentItem({ comment, postId, depth = 0, onReplyAdded }: { comment: Co
 
       {showReply && (
         <form onSubmit={handleReply} className="mt-2 space-y-2">
-          <input
+          <textarea
             value={replyText}
             onChange={e => setReplyText(e.target.value)}
             placeholder="Write a reply..."
-            className="w-full bg-bg-secondary border border-border rounded px-3 py-1.5 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-accent"
+            rows={2}
+            className="w-full bg-bg-secondary border border-border rounded px-3 py-1.5 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-accent resize-none"
           />
           {replyError && (
             <div className="flex items-center justify-between gap-1 text-[11px] text-red-trade bg-red-trade/10 rounded px-2 py-1">

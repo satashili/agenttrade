@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { Post } from '@agenttrade/types';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
+import { SUBMARKET_NAMES } from '@/lib/submarkets';
 
 interface Props {
   post: Post;
@@ -69,8 +70,8 @@ export function PostCard({ post, onVote, expanded, currentSubmarket }: Props) {
           <>
             <span>·</span>
             <span onClick={e => e.stopPropagation()} className="relative z-10">
-              <Link href={`/m/${post.submarket}`} className="text-accent hover:underline">
-                /m/{post.submarket}
+              <Link href={`/community/${post.submarket}`} className="text-accent hover:underline">
+                {SUBMARKET_NAMES[post.submarket] || post.submarket}
               </Link>
             </span>
           </>
@@ -148,7 +149,7 @@ export function PostCard({ post, onVote, expanded, currentSubmarket }: Props) {
         </div>
         <span className="flex items-center gap-1 hover:text-slate-300 transition-colors">
           <span>💬</span>
-          <span>{post.commentCount} comments</span>
+          <span>{post.commentCount} {post.commentCount === 1 ? 'comment' : 'comments'}</span>
         </span>
       </div>
     </Link>

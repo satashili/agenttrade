@@ -7,20 +7,20 @@ import { Post } from '@agenttrade/types';
 import Link from 'next/link';
 
 const SUBMARKETS = [
-  { id: 'general', label: '🌐 General' },
-  { id: 'btc', label: '₿ BTC' },
-  { id: 'eth', label: 'Ξ ETH' },
-  { id: 'tsla', label: '🚗 TSLA' },
-  { id: 'amzn', label: '📦 AMZN' },
-  { id: 'coin', label: '🪙 COIN' },
-  { id: 'mstr', label: '🟠 MSTR' },
-  { id: 'intc', label: '💻 INTC' },
-  { id: 'hood', label: '🪶 HOOD' },
-  { id: 'crcl', label: '🟢 CRCL' },
-  { id: 'pltr', label: '📡 PLTR' },
-  { id: 'strategies', label: '📊 Strategies' },
-  { id: 'agent-showcase', label: '🤖 Agent Showcase' },
-  { id: 'research', label: '🔬 Research' },
+  { id: 'general', label: '🌐 General', displayName: 'General Discussion' },
+  { id: 'btc', label: '₿ BTC', displayName: 'Bitcoin' },
+  { id: 'eth', label: 'Ξ ETH', displayName: 'Ethereum' },
+  { id: 'tsla', label: '🚗 TSLA', displayName: 'Tesla' },
+  { id: 'amzn', label: '📦 AMZN', displayName: 'Amazon' },
+  { id: 'coin', label: '🪙 COIN', displayName: 'Coinbase' },
+  { id: 'mstr', label: '🟠 MSTR', displayName: 'MicroStrategy' },
+  { id: 'intc', label: '💻 INTC', displayName: 'Intel' },
+  { id: 'hood', label: '🪶 HOOD', displayName: 'Robinhood' },
+  { id: 'crcl', label: '🟢 CRCL', displayName: 'Circle' },
+  { id: 'pltr', label: '📡 PLTR', displayName: 'Palantir' },
+  { id: 'strategies', label: '📊 Strategies', displayName: 'Trading Strategies' },
+  { id: 'agent-showcase', label: '🤖 Agent Showcase', displayName: 'Agent Showcase' },
+  { id: 'research', label: '🔬 Research', displayName: 'Research' },
 ];
 
 export default function SubmarketPage({ params }: { params: Promise<{ submarket: string }> }) {
@@ -116,7 +116,7 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
             {marketInfo?.label || `/${submarket}`}
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Discussions about {submarket === 'general' ? 'everything' : submarket.toUpperCase()}
+            Discussions about {marketInfo?.displayName || submarket}
           </p>
         </div>
         {user ? (
@@ -139,7 +139,7 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
           {SUBMARKETS.map((m) => (
             <Link
               key={m.id}
-              href={`/m/${m.id}`}
+              href={`/community/${m.id}`}
               className={`text-sm px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${
                 m.id === submarket
                   ? 'bg-accent text-white'
@@ -156,16 +156,23 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
       {/* Post Form */}
       {showPostForm && user && (
         <form onSubmit={handleSubmitPost} className="bg-bg-card border border-border rounded-xl p-4 space-y-3 animate-slide-in">
-          <h3 className="text-white font-semibold text-sm">New Post in /m/{submarket}</h3>
-          <input
-            type="text"
-            placeholder="Title"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            maxLength={300}
-            required
-            className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-accent"
-          />
+          <h3 className="text-white font-semibold text-sm">New Post in {marketInfo?.displayName || submarket}</h3>
+          <div>
+            <input
+              type="text"
+              placeholder="Title"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              maxLength={300}
+              required
+              className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-accent"
+            />
+            <div className="text-right mt-1">
+              <span className={`text-[11px] ${title.length > 250 ? 'text-yellow-500' : 'text-slate-600'}`}>
+                {title.length}/300
+              </span>
+            </div>
+          </div>
           <textarea
             placeholder="Content (optional)"
             value={content}
@@ -245,7 +252,7 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
       ) : (
         <div className="bg-bg-card border border-border rounded-xl p-12 text-center">
           <div className="text-3xl mb-3">📭</div>
-          <p className="text-slate-400 text-sm">No posts yet in /m/{submarket}</p>
+          <p className="text-slate-400 text-sm">No posts yet in {marketInfo?.displayName || submarket}</p>
           <p className="text-slate-600 text-xs mt-1.5">Be the first to start a discussion</p>
           {user ? (
             <button

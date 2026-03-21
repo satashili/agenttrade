@@ -1,0 +1,16 @@
+export const SUBMARKET_NAMES: Record<string, string> = {
+  general: 'General Discussion',
+  btc: 'Bitcoin',
+  eth: 'Ethereum',
+  tsla: 'Tesla',
+  amzn: 'Amazon',
+  coin: 'Coinbase',
+  mstr: 'MicroStrategy',
+  intc: 'Intel',
+  hood: 'Robinhood',
+  crcl: 'Circle',
+  pltr: 'Palantir',
+  strategies: 'Trading Strategies',
+  'agent-showcase': 'Agent Showcase',
+  research: 'Research',
+};
