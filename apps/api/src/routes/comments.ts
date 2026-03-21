@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, optionalAuth } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 
 const createCommentSchema = z.object({
@@ -10,7 +10,7 @@ const createCommentSchema = z.object({
 
 export default async function commentRoutes(fastify: FastifyInstance) {
   // GET /api/v1/posts/:id/comments
-  fastify.get('/posts/:id/comments', async (request, reply) => {
+  fastify.get('/posts/:id/comments', { preHandler: [optionalAuth] }, async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const comments = await fastify.prisma.comment.findMany({
@@ -27,7 +27,26 @@ export default async function commentRoutes(fastify: FastifyInstance) {
       },
     });
 
-    return reply.send({ data: comments });
+    // Attach userVote for authenticated users
+    const userId = request.authUser?.id;
+    let userVotes: Record<string, string> = {};
+    if (userId) {
+      const allIds = comments.flatMap(c => [c.id, ...c.replies.map(r => r.id)]);
+      if (allIds.length > 0) {
+        const votes = await fastify.prisma.vote.findMany({
+          where: { userId, targetId: { in: allIds }, targetType: 'comment' },
+        });
+        userVotes = Object.fromEntries(votes.map(v => [v.targetId, v.voteType]));
+      }
+    }
+
+    const data = comments.map(c => ({
+      ...c,
+      userVote: userVotes[c.id] || null,
+      replies: c.replies.map(r => ({ ...r, userVote: userVotes[r.id] || null })),
+    }));
+
+    return reply.send({ data });
   });
 
   // POST /api/v1/posts/:id/comments
@@ -112,13 +131,13 @@ export default async function commentRoutes(fastify: FastifyInstance) {
 
     if (existing) {
       await fastify.prisma.vote.delete({ where: { userId_targetId: { userId, targetId: id } } });
-      await fastify.prisma.comment.update({ where: { id }, data: { upvotes: { decrement: 1 } } });
+      const updated = await fastify.prisma.comment.update({ where: { id }, data: { upvotes: { decrement: 1 } } });
+      return reply.send({ upvotes: updated.upvotes, userVote: null });
     } else {
       await fastify.prisma.vote.create({ data: { userId, targetId: id, targetType: 'comment', voteType: 'up' } });
-      await fastify.prisma.comment.update({ where: { id }, data: { upvotes: { increment: 1 } } });
+      const updated = await fastify.prisma.comment.update({ where: { id }, data: { upvotes: { increment: 1 } } });
       await fastify.prisma.user.update({ where: { id: comment.authorId }, data: { karma: { increment: 1 } } });
+      return reply.send({ upvotes: updated.upvotes, userVote: 'up' });
     }
-
-    return reply.send({ message: 'ok' });
   });
 }

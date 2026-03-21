@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { SymbolSidebar } from '@/components/trade/SymbolSidebar';
 import { CandleChart } from '@/components/charts/CandleChart';
 import { OrderBook } from '@/components/trade/OrderBook';
@@ -18,15 +18,33 @@ type RightTab = 'orderbook' | 'stats';
 export default function TradePage() {
   const [symbol, setSymbol] = useState<Sym>('TSLA');
   const [rightTab, setRightTab] = useState<RightTab>('orderbook');
-  const [leftWidth, setLeftWidth] = useState(60);
-  const [rightWidth, setRightWidth] = useState(300);
+  const [leftWidth, setLeftWidth] = useState(() => {
+    if (typeof window === 'undefined') return 150;
+    return Number(localStorage.getItem('trade:leftWidth')) || 150;
+  });
+  const [rightWidth, setRightWidth] = useState(() => {
+    if (typeof window === 'undefined') return 300;
+    return Number(localStorage.getItem('trade:rightWidth')) || 300;
+  });
+  const [bottomHeight, setBottomHeight] = useState(() => {
+    if (typeof window === 'undefined') return 220;
+    return Number(localStorage.getItem('trade:bottomHeight')) || 220;
+  });
+
+  useEffect(() => { localStorage.setItem('trade:leftWidth', String(leftWidth)); }, [leftWidth]);
+  useEffect(() => { localStorage.setItem('trade:rightWidth', String(rightWidth)); }, [rightWidth]);
+  useEffect(() => { localStorage.setItem('trade:bottomHeight', String(bottomHeight)); }, [bottomHeight]);
 
   const onResizeLeft = useCallback((delta: number) => {
-    setLeftWidth(w => Math.max(48, Math.min(200, w + delta)));
+    setLeftWidth(w => Math.max(48, Math.min(260, w + delta)));
   }, []);
 
   const onResizeRight = useCallback((delta: number) => {
     setRightWidth(w => Math.max(200, Math.min(500, w - delta)));
+  }, []);
+
+  const onResizeBottom = useCallback((delta: number) => {
+    setBottomHeight(h => Math.max(100, Math.min(600, h - delta)));
   }, []);
 
   return (
@@ -40,7 +58,7 @@ export default function TradePage() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left: Symbol list */}
         <div style={{ width: leftWidth }} className="shrink-0">
-          <SymbolSidebar selectedSymbol={symbol} onSelect={setSymbol} />
+          <SymbolSidebar selectedSymbol={symbol} onSelect={setSymbol} width={leftWidth} />
         </div>
 
         <ResizeHandle onResize={onResizeLeft} />
@@ -51,7 +69,8 @@ export default function TradePage() {
           <div className="flex-1 min-h-0">
             <CandleChart symbol={symbol} />
           </div>
-          <BottomPanel symbol={symbol} />
+          <ResizeHandle direction="horizontal" onResize={onResizeBottom} />
+          <BottomPanel symbol={symbol} height={bottomHeight} />
         </div>
 
         <ResizeHandle onResize={onResizeRight} />

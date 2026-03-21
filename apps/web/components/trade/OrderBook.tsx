@@ -64,7 +64,7 @@ export function OrderBook({ symbol }: Props) {
         </div>
         <div className="flex items-center gap-2 text-[10px] text-slate-500">
           {spread > 0 && (
-            <span>Spread: <span className="text-slate-400">{fmtPrice(spread, symbol)}</span>
+            <span title="Difference between the lowest ask and highest bid price. A smaller spread means higher liquidity.">Spread: <span className="text-slate-400">{fmtPrice(spread, symbol)}</span>
               {spreadPct && <span className="text-slate-600 ml-1">({spreadPct}%)</span>}
             </span>
           )}
@@ -73,9 +73,9 @@ export function OrderBook({ symbol }: Props) {
 
       {/* Column headers */}
       <div className="grid grid-cols-3 px-3 py-1 border-b border-border/40 shrink-0">
-        <span className="text-[10px] text-slate-500">Price (USDT)</span>
-        <span className="text-[10px] text-slate-500 text-right">Size ({symbol})</span>
-        <span className="text-[10px] text-slate-500 text-right">Total</span>
+        <span className="text-[10px] text-slate-500" title="Limit order price level">Price (USDT)</span>
+        <span className="text-[10px] text-slate-500 text-right" title="Quantity available at this price level">Size ({symbol})</span>
+        <span className="text-[10px] text-slate-500 text-right" title="Cumulative quantity up to this price level. The background bar visualizes this depth.">Total</span>
       </div>
 
       {!hasData ? (

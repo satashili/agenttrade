@@ -6,16 +6,54 @@ import { Post } from '@agenttrade/types';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 
-export function PostCard({ post, onVote, expanded }: { post: Post; onVote?: () => void; expanded?: boolean }) {
+interface Props {
+  post: Post;
+  onVote?: (postId: string, upvotes: number, downvotes: number, userVote: 'up' | 'down' | null) => void;
+  expanded?: boolean;
+  currentSubmarket?: string;
+}
+
+export function PostCard({ post, onVote, expanded, currentSubmarket }: Props) {
   const { user } = useAuthStore();
 
   async function handleVote(type: 'up' | 'down') {
     if (!user) return;
+
+    // Optimistic update
+    let newUp = post.upvotes;
+    let newDown = post.downvotes;
+    let newUserVote: 'up' | 'down' | null;
+
+    if (post.userVote === type) {
+      // Toggle off
+      type === 'up' ? newUp-- : newDown--;
+      newUserVote = null;
+    } else if (post.userVote) {
+      // Flip
+      if (type === 'up') { newUp++; newDown--; }
+      else { newUp--; newDown++; }
+      newUserVote = type;
+    } else {
+      // New vote
+      type === 'up' ? newUp++ : newDown++;
+      newUserVote = type;
+    }
+
+    onVote?.(post.id, newUp, newDown, newUserVote);
+
     try {
-      await api.post(`/api/v1/posts/${post.id}/${type === 'up' ? 'upvote' : 'downvote'}`);
-      onVote?.();
-    } catch {}
+      const res = await api.post<{ upvotes: number; downvotes: number; userVote: 'up' | 'down' | null }>(
+        `/api/v1/posts/${post.id}/${type === 'up' ? 'upvote' : 'downvote'}`
+      );
+      // Reconcile with server
+      onVote?.(post.id, res.upvotes, res.downvotes, res.userVote);
+    } catch {
+      // Revert on error
+      onVote?.(post.id, post.upvotes, post.downvotes, post.userVote);
+    }
   }
+
+  const score = post.upvotes - post.downvotes;
 
   return (
     <Link href={`/post/${post.id}`} className="block bg-bg-card border border-border rounded-xl p-4 hover:border-border-light transition-colors cursor-pointer">
@@ -27,12 +65,16 @@ export function PostCard({ post, onVote, expanded }: { post: Post; onVote?: () =
             {post.author.displayName || post.author.name}
           </Link>
         </span>
-        <span>·</span>
-        <span onClick={e => e.stopPropagation()} className="relative z-10">
-          <Link href={`/m/${post.submarket}`} className="text-accent hover:underline">
-            /m/{post.submarket}
-          </Link>
-        </span>
+        {post.submarket !== currentSubmarket && (
+          <>
+            <span>·</span>
+            <span onClick={e => e.stopPropagation()} className="relative z-10">
+              <Link href={`/m/${post.submarket}`} className="text-accent hover:underline">
+                /m/{post.submarket}
+              </Link>
+            </span>
+          </>
+        )}
         <span>·</span>
         <span>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</span>
       </div>
@@ -44,16 +86,9 @@ export function PostCard({ post, onVote, expanded }: { post: Post; onVote?: () =
 
       {/* Content preview */}
       {post.content && (
-        <>
-          <p className={clsx('text-slate-400 text-sm mb-3 leading-relaxed', !expanded && 'line-clamp-2')}>
-            {post.content}
-          </p>
-          {!expanded && post.content.length > 120 && (
-            <span className="text-xs text-slate-500 -mt-2 mb-3 block">
-              Show more
-            </span>
-          )}
-        </>
+        <p className={clsx('text-slate-400 text-sm mb-3 leading-relaxed', !expanded && 'line-clamp-3')}>
+          {post.content}
+        </p>
       )}
 
       {/* Attached trade order */}
@@ -89,14 +124,24 @@ export function PostCard({ post, onVote, expanded }: { post: Post; onVote?: () =
         <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
           <button
             onClick={() => handleVote('up')}
-            className={clsx('hover:text-green-trade transition-colors', user ? 'cursor-pointer' : 'cursor-default')}
+            className={clsx(
+              'transition-colors',
+              user ? 'cursor-pointer' : 'cursor-default',
+              post.userVote === 'up' ? 'text-green-trade' : 'hover:text-green-trade'
+            )}
           >
             ▲
           </button>
-          <span className="tabular-nums">{post.upvotes - post.downvotes}</span>
+          <span className={clsx('tabular-nums', score > 0 && 'text-green-trade', score < 0 && 'text-red-trade')}>
+            {score}
+          </span>
           <button
             onClick={() => handleVote('down')}
-            className={clsx('hover:text-red-trade transition-colors', user ? 'cursor-pointer' : 'cursor-default')}
+            className={clsx(
+              'transition-colors',
+              user ? 'cursor-pointer' : 'cursor-default',
+              post.userVote === 'down' ? 'text-red-trade' : 'hover:text-red-trade'
+            )}
           >
             ▼
           </button>

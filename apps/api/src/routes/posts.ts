@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, optionalAuth } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 
 const createPostSchema = z.object({
@@ -23,7 +23,7 @@ function hotScore(upvotes: number, downvotes: number, createdAt: Date): number {
 
 export default async function postRoutes(fastify: FastifyInstance) {
   // GET /api/v1/feed — Personalized feed (or all hot posts)
-  fastify.get('/feed', async (request, reply) => {
+  fastify.get('/feed', { preHandler: [optionalAuth] }, async (request, reply) => {
     const { sort = 'hot', limit = '25', cursor, submarket } = request.query as Record<string, string>;
 
     const where: any = {};
@@ -51,8 +51,18 @@ export default async function postRoutes(fastify: FastifyInstance) {
     const hasMore = posts.length > parseInt(limit);
     if (hasMore) posts.pop();
 
+    // Attach userVote for authenticated users
+    const userId = request.authUser?.id;
+    let userVotes: Record<string, string> = {};
+    if (userId && posts.length > 0) {
+      const votes = await fastify.prisma.vote.findMany({
+        where: { userId, targetId: { in: posts.map(p => p.id) }, targetType: 'post' },
+      });
+      userVotes = Object.fromEntries(votes.map(v => [v.targetId, v.voteType]));
+    }
+
     return reply.send({
-      data: posts,
+      data: posts.map(p => ({ ...p, userVote: userVotes[p.id] || null })),
       hasMore,
       nextCursor: hasMore ? posts[posts.length - 1].createdAt.toISOString() : null,
     });
@@ -116,7 +126,7 @@ export default async function postRoutes(fastify: FastifyInstance) {
   });
 
   // GET /api/v1/posts/:id
-  fastify.get('/posts/:id', async (request, reply) => {
+  fastify.get('/posts/:id', { preHandler: [optionalAuth] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const post = await fastify.prisma.post.findUnique({
       where: { id },
@@ -127,7 +137,16 @@ export default async function postRoutes(fastify: FastifyInstance) {
     });
 
     if (!post) return reply.status(404).send({ error: 'Post not found' });
-    return reply.send({ post });
+
+    let userVote: string | null = null;
+    if (request.authUser?.id) {
+      const vote = await fastify.prisma.vote.findFirst({
+        where: { userId: request.authUser.id, targetId: id, targetType: 'post' },
+      });
+      userVote = vote?.voteType ?? null;
+    }
+
+    return reply.send({ post: { ...post, userVote } });
   });
 
   // DELETE /api/v1/posts/:id
@@ -182,12 +201,14 @@ async function handleVote(
 
   let upvoteDelta = 0;
   let downvoteDelta = 0;
+  let resultVote: string | null = null;
 
   if (existing) {
     if (existing.voteType === voteType) {
       // Remove vote
       await fastify.prisma.vote.delete({ where: { userId_targetId: { userId, targetId: id } } });
       voteType === 'up' ? upvoteDelta-- : downvoteDelta--;
+      resultVote = null;
     } else {
       // Flip vote
       await fastify.prisma.vote.update({
@@ -196,12 +217,14 @@ async function handleVote(
       });
       if (voteType === 'up') { upvoteDelta++; downvoteDelta--; }
       else { upvoteDelta--; downvoteDelta++; }
+      resultVote = voteType;
     }
   } else {
     await fastify.prisma.vote.create({
       data: { userId, targetId: id, targetType: 'post', voteType },
     });
     voteType === 'up' ? upvoteDelta++ : downvoteDelta++;
+    resultVote = voteType;
   }
 
   const updated = await fastify.prisma.post.update({
@@ -224,5 +247,5 @@ async function handleVote(
     });
   }
 
-  return reply.send({ upvotes: updated.upvotes + upvoteDelta, downvotes: updated.downvotes + downvoteDelta });
+  return reply.send({ upvotes: updated.upvotes + upvoteDelta, downvotes: updated.downvotes + downvoteDelta, userVote: resultVote });
 }

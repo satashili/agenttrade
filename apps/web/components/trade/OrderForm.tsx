@@ -92,7 +92,6 @@ export function OrderForm({ symbol }: Props) {
       await api.post('/api/v1/orders', body);
       setSuccess(`${side === 'buy' ? 'Buy' : 'Sell'} ${sizeNum} ${symbol} filled`);
       setSize(''); setPrice('');
-      setTimeout(() => setSuccess(''), 4000);
       fetchPortfolio();
     } catch (err: any) {
       setError(err.message || 'Failed to place order');
@@ -115,7 +114,6 @@ export function OrderForm({ symbol }: Props) {
       const fee = closedSize * fillPrice * 0.001;
       setCloseResult({ pnl: pnl - fee, symbol });
       setSuccess(`Closed ${symbol} position`);
-      setTimeout(() => { setSuccess(''); setCloseResult(null); }, 6000);
       fetchPortfolio();
     } catch (err: any) {
       setError(err.message || 'Failed to close position');
@@ -272,11 +270,22 @@ export function OrderForm({ symbol }: Props) {
                 </div>
               )}
 
-              {error   && <p className="text-[11px] text-red-trade">{error}</p>}
-              {success && <p className="text-[11px] text-green-trade">{success}</p>}
+              {error && (
+                <div className="flex items-center justify-between gap-1 text-[11px] text-red-trade bg-red-trade/10 rounded px-2 py-1">
+                  <span>{error}</span>
+                  <button onClick={() => setError('')} className="text-red-trade/60 hover:text-red-trade text-sm leading-none">&times;</button>
+                </div>
+              )}
+              {success && (
+                <div className="flex items-center justify-between gap-1 text-[11px] text-green-trade bg-green-trade/10 rounded px-2 py-1">
+                  <span>{success}</span>
+                  <button onClick={() => { setSuccess(''); setCloseResult(null); }} className="text-green-trade/60 hover:text-green-trade text-sm leading-none">&times;</button>
+                </div>
+              )}
               {closeResult && (
-                <div className={`text-[11px] font-medium ${closeResult.pnl >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
-                  Realized P&L: {closeResult.pnl >= 0 ? '+' : ''}${fmtUsd(closeResult.pnl)}
+                <div className={`flex items-center justify-between gap-1 text-[11px] font-medium rounded px-2 py-1 ${closeResult.pnl >= 0 ? 'text-green-trade bg-green-trade/10' : 'text-red-trade bg-red-trade/10'}`}>
+                  <span>Realized P&L: {closeResult.pnl >= 0 ? '+' : ''}${fmtUsd(closeResult.pnl)}</span>
+                  <button onClick={() => setCloseResult(null)} className="opacity-60 hover:opacity-100 text-sm leading-none">&times;</button>
                 </div>
               )}
 

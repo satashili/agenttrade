@@ -1,12 +1,12 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore, useMarketStore } from '@/lib/store';
 import { api } from '@/lib/api';
 
 type Sym = string;
 type Tab = 'activity' | 'history' | 'positions' | 'open' | 'assets';
 
-interface Props { symbol: Sym; }
+interface Props { symbol: Sym; height?: number; }
 
 interface Order {
   id: string;
@@ -25,17 +25,28 @@ interface Order {
 
 interface Position {
   symbol: string;
+  side: string;
   size: number;
   avgCost: number;
   currentPrice: number;
-  pnl: number;
-  pnlPct: number;
   value: number;
+  unrealizedPnl: number;
+  unrealizedPnlPct: number;
+  realizedPnl: number;
+  marginUsed: number;
+  allocationPct?: number;
 }
 
 interface Portfolio {
-  account: { balance: number; initialBalance: number; totalValue: number; totalPnl: number; totalPnlPct: number };
-  positions: Position[];
+  cashBalance: number;
+  positionValue: number;
+  totalValue: number;
+  totalPnl: number;
+  totalPnlPct: number;
+  totalUnrealizedPnl: number;
+  totalRealizedPnl: number;
+  leverage: { maxLeverage: number; totalMarginUsed: number; availableMargin: number; currentLeverage: number };
+  positions: Record<string, Position>;
 }
 
 interface TradeRecord {
@@ -66,7 +77,7 @@ function timeAgo(ts: number): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-export function BottomPanel({ symbol }: Props) {
+export function BottomPanel({ symbol, height = 220 }: Props) {
   const [tab, setTab] = useState<Tab>('activity');
   const [orders, setOrders] = useState<Order[]>([]);
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
@@ -138,12 +149,34 @@ export function BottomPanel({ symbol }: Props) {
       })),
   ].sort((a, b) => b.ts - a.ts).slice(0, 50);
 
+  // Track badge changes for pop animation
+  const prevBadges = useRef<Record<string, number>>({});
+  const [popBadge, setPopBadge] = useState<string | null>(null);
+  const badgeCounts: Record<string, number> = {
+    activity: allActivity.length,
+    open: openOrders.length,
+    positions: portfolio ? Object.keys(portfolio.positions).length : 0,
+  };
+  useEffect(() => {
+    for (const key of Object.keys(badgeCounts)) {
+      const prev = prevBadges.current[key] ?? 0;
+      if (badgeCounts[key] > prev && prev > 0) {
+        setPopBadge(key);
+        const t = setTimeout(() => setPopBadge(null), 350);
+        prevBadges.current = { ...badgeCounts };
+        return () => clearTimeout(t);
+      }
+    }
+    prevBadges.current = { ...badgeCounts };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allActivity.length, openOrders.length, portfolio ? Object.keys(portfolio.positions).length : 0]);
+
   const TABS: { id: Tab; label: string; badge?: number }[] = isLoggedIn
     ? [
         { id: 'activity', label: 'Activity', badge: allActivity.length || undefined },
         { id: 'open', label: 'Open Orders', badge: openOrders.length || undefined },
         { id: 'history', label: 'Order History' },
-        { id: 'positions', label: 'Positions', badge: portfolio?.positions.length || undefined },
+        { id: 'positions', label: 'Positions', badge: portfolio ? Object.keys(portfolio.positions).length || undefined : undefined },
         { id: 'assets', label: 'Assets' },
       ]
     : [
@@ -153,7 +186,7 @@ export function BottomPanel({ symbol }: Props) {
       ];
 
   return (
-    <div className="border-t border-border bg-bg-card flex flex-col" style={{ height: '220px' }}>
+    <div className="border-t border-border bg-bg-card flex flex-col" style={{ height }}>
       {/* Tab bar */}
       <div className="flex border-b border-border shrink-0">
         {TABS.map(t => (
@@ -167,8 +200,11 @@ export function BottomPanel({ symbol }: Props) {
             }`}
           >
             {t.label}
+            {t.id === 'activity' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[#0ECB81] animate-pulse" title="Live — real-time updates via WebSocket" />
+            )}
             {t.badge ? (
-              <span className="bg-accent/25 text-accent text-[10px] px-1.5 py-px rounded-full">{t.badge}</span>
+              <span className={`bg-accent/30 text-accent text-[10px] px-1.5 py-px rounded-full font-semibold border border-accent/20 ${popBadge === t.id ? 'badge-pop' : ''}`}>{t.badge}</span>
             ) : null}
           </button>
         ))}
@@ -204,7 +240,10 @@ export function BottomPanel({ symbol }: Props) {
                 </thead>
                 <tbody>
                   {allActivity.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center py-6 text-slate-600 text-xs">No AI activity yet</td></tr>
+                    <tr><td colSpan={6} className="text-center py-8 text-xs">
+                      <div className="text-slate-600">No AI activity yet</div>
+                      <div className="text-slate-700 mt-1">Trades from AI agents will appear here in real-time</div>
+                    </td></tr>
                   ) : allActivity.map((a) => (
                     <tr key={a.id} className="border-b border-border/20 hover:bg-bg-secondary/50">
                       <td className="px-3 py-1.5 font-medium text-white truncate max-w-[140px]">{a.agentName}</td>
@@ -239,7 +278,10 @@ export function BottomPanel({ symbol }: Props) {
                 </thead>
                 <tbody>
                   {platformTrades.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center py-6 text-slate-600 text-xs">No trades yet</td></tr>
+                    <tr><td colSpan={7} className="text-center py-8 text-xs">
+                      <div className="text-slate-600">No trades yet</div>
+                      <div className="text-slate-700 mt-1">Agent trades will show up here once they start executing</div>
+                    </td></tr>
                   ) : platformTrades.map(t => (
                     <tr key={t.id} className="border-b border-border/20 hover:bg-bg-secondary/50">
                       <td className="px-3 py-1.5 font-medium text-white truncate max-w-[140px]">{t.agentDisplayName || t.agentName}</td>
@@ -270,7 +312,10 @@ export function BottomPanel({ symbol }: Props) {
                 </thead>
                 <tbody>
                   {historyOrders.length === 0 ? (
-                    <tr><td colSpan={8} className="text-center py-6 text-slate-600 text-xs">No order history</td></tr>
+                    <tr><td colSpan={8} className="text-center py-8 text-xs">
+                      <div className="text-slate-600">No order history</div>
+                      <div className="text-slate-700 mt-1">Your completed and cancelled orders will appear here</div>
+                    </td></tr>
                   ) : historyOrders.map(o => (
                     <tr key={o.id} className="border-b border-border/20 hover:bg-bg-secondary/50">
                       <td className="px-3 py-1.5 font-medium text-white">{o.symbol}</td>
@@ -298,20 +343,23 @@ export function BottomPanel({ symbol }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {!portfolio?.positions.length ? (
-                    <tr><td colSpan={7} className="text-center py-6 text-slate-600 text-xs">No open positions</td></tr>
-                  ) : portfolio.positions.map((p, i) => (
+                  {!portfolio || Object.keys(portfolio.positions).length === 0 ? (
+                    <tr><td colSpan={7} className="text-center py-8 text-xs">
+                      <div className="text-slate-600">No open positions</div>
+                      <div className="text-slate-700 mt-1">Place an order to open your first position</div>
+                    </td></tr>
+                  ) : Object.values(portfolio.positions).map((p, i) => (
                     <tr key={i} className="border-b border-border/20 hover:bg-bg-secondary/50">
                       <td className="px-3 py-1.5 font-medium text-white">{p.symbol}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{p.size}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(p.avgCost)}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(p.currentPrice)}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(p.value)}</td>
-                      <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${p.pnl >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
-                        {p.pnl >= 0 ? '+' : ''}${usd(Math.abs(p.pnl))}
+                      <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${p.unrealizedPnl >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
+                        {p.unrealizedPnl >= 0 ? '+' : ''}${usd(Math.abs(p.unrealizedPnl))}
                       </td>
-                      <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${p.pnlPct >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
-                        {p.pnlPct >= 0 ? '+' : ''}{p.pnlPct.toFixed(2)}%
+                      <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${p.unrealizedPnlPct >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
+                        {p.unrealizedPnlPct >= 0 ? '+' : ''}{p.unrealizedPnlPct.toFixed(2)}%
                       </td>
                     </tr>
                   ))}
@@ -335,7 +383,10 @@ export function BottomPanel({ symbol }: Props) {
                 </thead>
                 <tbody>
                   {openOrders.length === 0 ? (
-                    <tr><td colSpan={7} className="text-center py-6 text-slate-600 text-xs">No open orders</td></tr>
+                    <tr><td colSpan={7} className="text-center py-8 text-xs">
+                      <div className="text-slate-600">No open orders</div>
+                      <div className="text-slate-700 mt-1">Use the order form to place a limit or stop order</div>
+                    </td></tr>
                   ) : openOrders.map(o => (
                     <tr key={o.id} className="border-b border-border/20 hover:bg-bg-secondary/50">
                       <td className="px-3 py-1.5 font-medium text-white">{o.symbol}</td>
@@ -357,23 +408,26 @@ export function BottomPanel({ symbol }: Props) {
             {tab === 'assets' && (
               <div className="p-4">
                 {!portfolio ? (
-                  <p className="text-xs text-slate-600 text-center py-4">No data</p>
+                  <div className="text-center py-8">
+                    <p className="text-xs text-slate-600">No portfolio data</p>
+                    <p className="text-xs text-slate-700 mt-1">Your balance and portfolio stats will appear here after your first trade</p>
+                  </div>
                 ) : (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
-                      { label: 'Available Balance', value: `$${usd(portfolio.account.balance)}`, sub: 'USDT', color: 'text-white' },
-                      { label: 'Total Portfolio Value', value: `$${usd(portfolio.account.totalValue)}`, sub: 'USDT', color: 'text-white' },
+                      { label: 'Available Balance', value: `$${usd(portfolio.cashBalance)}`, sub: 'USDT', color: 'text-white' },
+                      { label: 'Total Portfolio Value', value: `$${usd(portfolio.totalValue)}`, sub: 'USDT', color: 'text-white' },
                       {
                         label: 'Total PnL',
-                        value: `${portfolio.account.totalPnl >= 0 ? '+' : ''}$${usd(portfolio.account.totalPnl)}`,
+                        value: `${portfolio.totalPnl >= 0 ? '+' : ''}$${usd(portfolio.totalPnl)}`,
                         sub: 'vs $100,000 initial',
-                        color: portfolio.account.totalPnl >= 0 ? 'text-green-trade' : 'text-red-trade',
+                        color: portfolio.totalPnl >= 0 ? 'text-green-trade' : 'text-red-trade',
                       },
                       {
                         label: 'Return',
-                        value: `${portfolio.account.totalPnlPct >= 0 ? '+' : ''}${portfolio.account.totalPnlPct.toFixed(2)}%`,
+                        value: `${portfolio.totalPnlPct >= 0 ? '+' : ''}${portfolio.totalPnlPct.toFixed(2)}%`,
                         sub: 'all time',
-                        color: portfolio.account.totalPnlPct >= 0 ? 'text-green-trade' : 'text-red-trade',
+                        color: portfolio.totalPnlPct >= 0 ? 'text-green-trade' : 'text-red-trade',
                       },
                     ].map(item => (
                       <div key={item.label} className="bg-bg-secondary rounded-lg p-3 border border-border/50">
@@ -411,14 +465,24 @@ function PlatformPositions() {
     <table className="w-full text-xs">
       <thead className="sticky top-0 bg-bg-card z-10">
         <tr className="text-[10px] text-slate-500 border-b border-border/50">
-          {['Agent', 'Model', 'Portfolio Value', 'PnL%', 'Trades', 'Win Rate'].map(h => (
-            <th key={h} className={`px-3 py-1.5 font-normal ${h === 'Agent' ? 'text-left' : 'text-right'}`}>{h}</th>
+          {([
+            { label: 'Agent', tip: 'AI agent name' },
+            { label: 'Model', tip: 'AI model powering this agent' },
+            { label: 'Portfolio Value', tip: 'Total value of cash + open positions' },
+            { label: 'PnL%', tip: 'Profit and loss as a percentage of initial balance ($100,000)' },
+            { label: 'Trades', tip: 'Total number of executed trades' },
+            { label: 'Win Rate', tip: 'Percentage of trades that were profitable' },
+          ]).map(h => (
+            <th key={h.label} title={h.tip} className={`px-3 py-1.5 font-normal cursor-help ${h.label === 'Agent' ? 'text-left' : 'text-right'}`}>{h.label}</th>
           ))}
         </tr>
       </thead>
       <tbody>
         {data.length === 0 ? (
-          <tr><td colSpan={6} className="text-center py-6 text-slate-600 text-xs">No agents trading yet</td></tr>
+          <tr><td colSpan={6} className="text-center py-8 text-xs">
+            <div className="text-slate-600">No agents trading yet</div>
+            <div className="text-slate-700 mt-1">Agent rankings will appear here once trading begins</div>
+          </td></tr>
         ) : data.map((a: any) => (
           <tr key={a.agent.id} className="border-b border-border/20 hover:bg-bg-secondary/50">
             <td className="px-3 py-1.5 font-medium text-white truncate max-w-[140px]">{a.agent.displayName || a.agent.name}</td>

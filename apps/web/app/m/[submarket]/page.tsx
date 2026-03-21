@@ -1,5 +1,5 @@
 'use client';
-import { use, useState, useEffect, useCallback } from 'react';
+import { use, useState, useEffect, useCallback, useRef } from 'react';
 import { PostCard } from '@/components/community/PostCard';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
@@ -28,17 +28,24 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
   const [posts, setPosts] = useState<Post[]>([]);
   const [sort, setSort] = useState<'hot' | 'new'>('hot');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const { user } = useAuthStore();
   const [showPostForm, setShowPostForm] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [postError, setPostError] = useState('');
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const loadPosts = useCallback(async () => {
     setLoading(true);
     try {
       const data = await api.get<any>(`/api/v1/feed?submarket=${submarket}&sort=${sort}&limit=25`);
       setPosts(data.data || []);
+      setHasMore(data.hasMore ?? false);
+      setNextCursor(data.nextCursor ?? null);
     } catch {
       setPosts([]);
     } finally {
@@ -46,12 +53,45 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
     }
   }, [submarket, sort]);
 
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const data = await api.get<any>(`/api/v1/feed?submarket=${submarket}&sort=${sort}&limit=25&cursor=${nextCursor}`);
+      setPosts(prev => [...prev, ...(data.data || [])]);
+      setHasMore(data.hasMore ?? false);
+      setNextCursor(data.nextCursor ?? null);
+    } catch {} finally {
+      setLoadingMore(false);
+    }
+  }, [submarket, sort, nextCursor, hasMore, loadingMore]);
+
   useEffect(() => { loadPosts(); }, [loadPosts]);
+
+  // Infinite scroll via IntersectionObserver
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMore(); },
+      { rootMargin: '200px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loadMore]);
+
+  // Optimistic vote update
+  function handleVote(postId: string, newUpvotes: number, newDownvotes: number, newUserVote: 'up' | 'down' | null) {
+    setPosts(prev => prev.map(p =>
+      p.id === postId ? { ...p, upvotes: newUpvotes, downvotes: newDownvotes, userVote: newUserVote } : p
+    ));
+  }
 
   async function handleSubmitPost(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
     setSubmitting(true);
+    setPostError('');
     try {
       await api.post('/api/v1/posts', { submarket, title, content, postType: 'text' });
       setTitle('');
@@ -59,7 +99,7 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
       setShowPostForm(false);
       loadPosts();
     } catch (err: any) {
-      alert(err.message);
+      setPostError(err.message || 'Failed to create post');
     } finally {
       setSubmitting(false);
     }
@@ -79,36 +119,43 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
             Discussions about {submarket === 'general' ? 'everything' : submarket.toUpperCase()}
           </p>
         </div>
-        {user && (
+        {user ? (
           <button
             onClick={() => setShowPostForm(!showPostForm)}
             className="bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-lg text-sm transition-colors"
           >
             + New Post
           </button>
+        ) : (
+          <a href="/login" className="text-sm text-slate-500 hover:text-accent transition-colors">
+            Log in to post
+          </a>
         )}
       </div>
 
       {/* Submarket Nav */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {SUBMARKETS.map((m) => (
-          <Link
-            key={m.id}
-            href={`/m/${m.id}`}
-            className={`text-sm px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${
-              m.id === submarket
-                ? 'bg-accent text-white'
-                : 'bg-bg-card border border-border text-slate-400 hover:text-white'
-            }`}
-          >
-            {m.label}
-          </Link>
-        ))}
+      <div className="relative">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          {SUBMARKETS.map((m) => (
+            <Link
+              key={m.id}
+              href={`/m/${m.id}`}
+              className={`text-sm px-3 py-1.5 rounded-full whitespace-nowrap transition-colors ${
+                m.id === submarket
+                  ? 'bg-accent text-white'
+                  : 'bg-bg-card border border-border text-slate-400 hover:text-white'
+              }`}
+            >
+              {m.label}
+            </Link>
+          ))}
+        </div>
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#0B0E11] to-transparent" />
       </div>
 
       {/* Post Form */}
       {showPostForm && user && (
-        <form onSubmit={handleSubmitPost} className="bg-bg-card border border-border rounded-xl p-4 space-y-3">
+        <form onSubmit={handleSubmitPost} className="bg-bg-card border border-border rounded-xl p-4 space-y-3 animate-slide-in">
           <h3 className="text-white font-semibold text-sm">New Post in /m/{submarket}</h3>
           <input
             type="text"
@@ -126,6 +173,12 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
             rows={4}
             className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-accent resize-none"
           />
+          {postError && (
+            <div className="flex items-center justify-between gap-1 text-[11px] text-red-trade bg-red-trade/10 rounded px-2 py-1.5">
+              <span>{postError}</span>
+              <button type="button" onClick={() => setPostError('')} className="text-red-trade/60 hover:text-red-trade text-sm leading-none">&times;</button>
+            </div>
+          )}
           <div className="flex gap-2">
             <button
               type="submit"
@@ -136,7 +189,7 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
             </button>
             <button
               type="button"
-              onClick={() => setShowPostForm(false)}
+              onClick={() => { setShowPostForm(false); setPostError(''); }}
               className="text-slate-400 hover:text-white px-4 py-2 rounded-lg text-sm transition-colors"
             >
               Cancel
@@ -173,13 +226,39 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
       ) : posts.length > 0 ? (
         <div className="space-y-4">
           {posts.map(post => (
-            <PostCard key={post.id} post={post} onVote={loadPosts} />
+            <PostCard key={post.id} post={post} onVote={handleVote} currentSubmarket={submarket} />
           ))}
+
+          {/* Infinite scroll sentinel */}
+          <div ref={sentinelRef} />
+          {loadingMore && (
+            <div className="flex justify-center py-4">
+              <span className="text-xs text-slate-500 animate-pulse">Loading more posts...</span>
+            </div>
+          )}
+          {!hasMore && posts.length >= 25 && (
+            <div className="text-center py-4 text-xs text-slate-600">
+              You've reached the end
+            </div>
+          )}
         </div>
       ) : (
         <div className="bg-bg-card border border-border rounded-xl p-12 text-center">
           <div className="text-3xl mb-3">📭</div>
           <p className="text-slate-400 text-sm">No posts yet in /m/{submarket}</p>
+          <p className="text-slate-600 text-xs mt-1.5">Be the first to start a discussion</p>
+          {user ? (
+            <button
+              onClick={() => setShowPostForm(true)}
+              className="mt-4 bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-lg text-sm transition-colors"
+            >
+              + Create Post
+            </button>
+          ) : (
+            <a href="/login" className="inline-block mt-4 text-sm text-accent hover:underline">
+              Log in to post
+            </a>
+          )}
         </div>
       )}
     </div>

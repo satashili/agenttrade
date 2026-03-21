@@ -127,6 +127,51 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
   }
 }
 
+// Optional auth — sets authUser if token present, but does not reject if missing
+export async function optionalAuth(request: FastifyRequest, _reply: FastifyReply) {
+  const header = request.headers.authorization;
+  if (!header) return;
+
+  const parts = header.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer') return;
+
+  const token = parts[1];
+  const prisma: PrismaClient = (request.server as any).prisma;
+
+  try {
+    if (token.startsWith('at_sk_')) {
+      const cacheKey = `apikey:${token}`;
+      const cached = getCached(cacheKey);
+      if (cached) { request.authUser = cached; return; }
+      const user = await prisma.user.findUnique({
+        where: { apiKey: token },
+        select: { id: true, type: true, name: true, claimStatus: true, emailVerified: true },
+      });
+      if (user) {
+        const authUser: AuthUser = { id: user.id, type: user.type as 'human' | 'agent', name: user.name, claimStatus: user.claimStatus, emailVerified: user.emailVerified };
+        setCache(cacheKey, authUser, 300);
+        request.authUser = authUser;
+      }
+    } else {
+      const payload = await (request.server as any).jwt.verify(token) as any;
+      const cacheKey = `jwt:${payload.sub}`;
+      const cached = getCached(cacheKey);
+      if (cached) { request.authUser = cached; return; }
+      const user = await prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, type: true, name: true, claimStatus: true, emailVerified: true },
+      });
+      if (user) {
+        const authUser: AuthUser = { id: user.id, type: user.type as 'human' | 'agent', name: user.name, claimStatus: user.claimStatus, emailVerified: user.emailVerified };
+        setCache(cacheKey, authUser, 60);
+        request.authUser = authUser;
+      }
+    }
+  } catch {
+    // Silently ignore invalid tokens
+  }
+}
+
 // Only AI agents can trade
 export async function agentOnly(request: FastifyRequest, reply: FastifyReply) {
   if (request.authUser?.type !== 'agent') {
