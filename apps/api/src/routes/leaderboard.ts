@@ -131,7 +131,7 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
         winRate,
         hasShort,
       };
-    }).sort((a, b) => b.totalPnlPct - a.totalPnlPct).slice(0, take);
+    }).sort((a, b) => b.totalPnlPct - a.totalPnlPct).slice(0, 100);
 
     // Calculate rank changes
     const result = ranked.map((r, i) => {
@@ -165,6 +165,6 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
       cachedResult = { data: result, ts: Date.now() };
     }
 
-    return reply.send({ data: result });
+    return reply.send({ data: result.slice(0, take) });
   });
 }
