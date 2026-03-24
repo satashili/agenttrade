@@ -15,7 +15,7 @@ function fmtTime(ts: number) {
 type PanelSize = 'normal' | 'expanded';
 
 export function GlobalChat() {
-  const { messages, unreadCount, isOpen, onlineCount, loaded, toggle, markRead } = useChatStore();
+  const { messages, unreadCount, isOpen, onlineCount, loaded, toggle, markRead, setOpen } = useChatStore();
   const user = useAuthStore((s) => s.user);
   const [input, setInput] = useState('');
   const [isMinimized, setIsMinimized] = useState(false);
@@ -24,32 +24,49 @@ export function GlobalChat() {
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Dragging state
+  // Dragging state (desktop only)
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
 
-  // Initialize position on mount (bottom-right)
+  // Detect mobile and initialize
   useEffect(() => {
-    if (typeof window !== 'undefined' && !position) {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      // On mobile, default to open; on desktop keep current store state
+      if (mobile) {
+        setOpen(true);
+      }
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Initialize desktop position on mount (bottom-right)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !position && !isMobile) {
       setPosition({
         x: window.innerWidth - 360,
         y: window.innerHeight - 440,
       });
     }
-  }, [position]);
+  }, [position, isMobile]);
 
-  // Drag handlers
+  // Drag handlers (desktop only)
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!position) return;
+    if (!position || isMobile) return;
     setIsDragging(true);
     dragOffset.current = {
       x: e.clientX - position.x,
       y: e.clientY - position.y,
     };
     e.preventDefault();
-  }, [position]);
+  }, [position, isMobile]);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -110,9 +127,139 @@ export function GlobalChat() {
     ? { w: 420, h: 560 }
     : { w: 340, h: 400 };
 
+  // ─── Mobile Layout ─────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <>
+        {/* Mobile floating button — only shown when panel is closed */}
+        {!isOpen && (
+          <button
+            onClick={toggle}
+            className="fixed bottom-5 right-4 z-[9999] w-12 h-12 rounded-full bg-[#1E6FFF] hover:bg-[#1558CC] active:bg-[#1558CC] text-white flex items-center justify-center shadow-lg shadow-[#1E6FFF]/30 transition-all active:scale-95"
+            aria-label="Open chat"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-[10px] font-bold flex items-center justify-center animate-pulse">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+            <span className="absolute inset-0 rounded-full bg-[#1E6FFF]/30 animate-ping opacity-20" />
+          </button>
+        )}
+
+        {/* Mobile chat panel — bottom sheet */}
+        {isOpen && (
+          <div
+            className="fixed bottom-0 left-0 right-0 z-[9999] flex flex-col bg-[#0B0E11]/98 backdrop-blur-xl border-t border-[#1E6FFF]/20 shadow-2xl shadow-black/60"
+            style={{
+              height: '42vh',
+              animation: 'mobileChatSlideUp 0.25s ease-out',
+              paddingBottom: 'env(safe-area-inset-bottom)',
+              touchAction: 'pan-y',
+            }}
+          >
+            {/* Mobile header — collapse button lives here */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1E6FFF]/15 bg-gradient-to-r from-[#0d1117] to-[#12161c] shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="relative w-2 h-2">
+                  <span className="absolute inset-0 w-2 h-2 bg-[#0ECB81] rounded-full" />
+                  <span className="absolute inset-0 w-2 h-2 bg-[#0ECB81] rounded-full animate-ping opacity-30" />
+                </div>
+                <span className="text-[11px] font-bold text-white/80 tracking-widest">LIVE CHAT</span>
+                <span className="text-[10px] text-slate-500 tabular-nums">{onlineCount} online</span>
+              </div>
+              {/* Collapse button in header — no overlap with input */}
+              <button
+                onClick={toggle}
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#1E6FFF]/10 hover:bg-[#1E6FFF]/20 active:bg-[#1E6FFF]/30 text-white/60 hover:text-white transition-colors"
+                aria-label="Collapse chat"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Messages */}
+            <div
+              ref={scrollRef}
+              onScroll={handleScroll}
+              className="flex-1 overflow-y-auto px-4 py-2 space-y-0.5 overscroll-contain"
+              style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+            >
+              {!loaded && (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-slate-600 text-xs animate-pulse">Connecting...</div>
+                </div>
+              )}
+              {loaded && messages.length === 0 && (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-slate-700 text-[11px]">Waiting for activity...</div>
+                </div>
+              )}
+              {messages.map((msg, i) => (
+                <ChatMessage key={`${msg.ts}-${i}`} msg={msg} />
+              ))}
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Input */}
+            {user ? (
+              <div className="px-4 py-3 border-t border-border/40 bg-[#0B0E11] shrink-0">
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Say something..."
+                    maxLength={500}
+                    enterKeyHint="send"
+                    className="flex-1 bg-[#12161c] border border-border/50 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 outline-none transition-all focus:border-[#1E6FFF]/40 focus:shadow-[0_0_6px_rgba(30,111,255,0.1)]"
+                  />
+                  <button
+                    onClick={sendMessage}
+                    disabled={!input.trim()}
+                    className="w-10 h-10 flex items-center justify-center bg-[#1E6FFF] hover:bg-[#1558CC] disabled:bg-slate-800 disabled:text-slate-600 text-white rounded-xl transition-all shrink-0"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="px-4 py-3 border-t border-border/40 bg-[#0B0E11] text-center shrink-0">
+                <Link href="/login" className="text-sm text-[#1E6FFF] hover:text-white transition-colors font-medium">
+                  Log in to chat
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+
+        <style jsx global>{`
+          @keyframes mobileChatSlideUp {
+            from { opacity: 0; transform: translateY(100%); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @keyframes chatMsgIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
+      </>
+    );
+  }
+
+  // ─── Desktop Layout ────────────────────────────────────────────────────────
   if (!position) return null;
 
-  // Fully closed
+  // Fully closed — floating button only
   if (!isOpen) {
     return (
       <button
@@ -139,7 +286,7 @@ export function GlobalChat() {
         style={{
           left: position.x,
           top: position.y,
-          width: isMinimized ? dims.w : dims.w,
+          width: dims.w,
           height: isMinimized ? 36 : dims.h,
           cursor: isDragging ? 'grabbing' : 'auto',
           animation: 'chatSlideUp 0.2s ease-out',
