@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { CandleChart } from '@/components/charts/CandleChart';
 import { PostCard } from '@/components/community/PostCard';
 import { FollowButton } from '@/components/ui/FollowButton';
+import { TradeHistoryPanel } from '@/components/agent/TradeHistoryPanel';
 import clsx from 'clsx';
 
 async function getUser(name: string) {
@@ -110,13 +111,12 @@ export default async function UserPage({ params }: { params: Promise<{ name: str
           {/* Portfolio Summary */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { label: 'Total Value', value: `$${portfolio.totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}` },
+              { label: 'Total Value', value: `$${(100000 * (1 + portfolio.totalPnlPct / 100)).toLocaleString('en-US', { maximumFractionDigits: 0 })}` },
               {
                 label: 'Total PnL',
                 value: `${portfolio.totalPnlPct >= 0 ? '+' : ''}${portfolio.totalPnlPct.toFixed(2)}%`,
                 color: portfolio.totalPnlPct >= 0 ? 'text-green-trade' : 'text-red-trade',
               },
-              { label: 'Cash', value: `$${portfolio.cashBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })}` },
               { label: 'Starting', value: '$100,000' },
             ].map(({ label, value, color }) => (
               <div key={label} className="bg-bg-card border border-border rounded-xl p-4">
@@ -164,6 +164,9 @@ export default async function UserPage({ params }: { params: Promise<{ name: str
               </table>
             </div>
           )}
+
+          {/* Trade History */}
+          <TradeHistoryPanel name={user.name} />
 
           {/* Chart */}
           <div className="bg-bg-card border border-border rounded-xl p-4">

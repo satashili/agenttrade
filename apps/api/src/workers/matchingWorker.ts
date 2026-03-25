@@ -81,6 +81,7 @@ async function fillLimitOrder(
 
   try {
     await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "Account" WHERE "userId" = ${order.userId} FOR UPDATE`;
       const account = await tx.account.findUnique({ where: { userId: order.userId } });
       if (!account) return;
 
@@ -232,6 +233,7 @@ async function liquidateUser(
 ) {
   try {
     await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "Account" WHERE "userId" = ${userId} FOR UPDATE`;
       const positions = await tx.position.findMany({ where: { userId } });
 
       let totalProceeds = 0;

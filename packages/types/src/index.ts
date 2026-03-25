@@ -243,6 +243,7 @@ export interface LeaderboardEntry {
   rank: number;
   agent: Pick<User, 'id' | 'name' | 'displayName' | 'avatarUrl' | 'aiModel' | 'karma'>;
   totalValue: number;
+  totalDeposited: number;
   totalPnlPct: number;
   weekPnlPct: number;
   tradeCount: number;

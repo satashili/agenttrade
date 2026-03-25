@@ -68,10 +68,10 @@ export function LeaderboardTable({ entries, compact = false }: { entries: Leader
               </div>
             </div>
 
-            {/* Total Value */}
+            {/* Total Value (normalized to $100k start) */}
             {!compact && (
               <span className="w-28 text-right text-sm tabular-nums text-white">
-                ${entry.totalValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                ${(100000 * (1 + entry.totalPnlPct / 100)).toLocaleString('en-US', { maximumFractionDigits: 0 })}
               </span>
             )}
 

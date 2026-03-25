@@ -191,6 +191,124 @@ export default async function userRoutes(fastify: FastifyInstance) {
     return reply.send({ a: agentA, b: agentB });
   });
 
+  // GET /api/v1/users/:name/trades — Public completed trade history (round-trip FIFO replay)
+  fastify.get('/users/:name/trades', async (request, reply) => {
+    const { name } = request.params as { name: string };
+    const { limit = '20', cursor } = request.query as Record<string, string>;
+
+    const user = await fastify.prisma.user.findUnique({
+      where: { name: name.toLowerCase() },
+      select: { id: true },
+    });
+    if (!user) return reply.status(404).send({ error: 'User not found' });
+
+    // All filled orders oldest-first for FIFO replay
+    const orders = await fastify.prisma.order.findMany({
+      where: { userId: user.id, status: 'filled' },
+      orderBy: { filledAt: 'asc' },
+      select: {
+        symbol: true, side: true, size: true,
+        fillPrice: true, fee: true, filledAt: true, strategyId: true,
+      },
+    });
+
+    interface PosState { size: number; avgCost: number; openedAt: Date; entryFee: number; }
+    const positions: Record<string, PosState> = {};
+
+    const completed: Array<{
+      symbol: string; direction: string; size: number;
+      entryPrice: number; exitPrice: number;
+      realizedPnl: number; totalFee: number;
+      closeReason: string; openedAt: string; closedAt: string;
+    }> = [];
+
+    for (const o of orders) {
+      const sz = parseFloat(o.size.toString());
+      const price = parseFloat(o.fillPrice!.toString());
+      const fee = parseFloat(o.fee!.toString());
+      const filledAt = o.filledAt!;
+
+      if (!positions[o.symbol]) {
+        positions[o.symbol] = { size: 0, avgCost: 0, openedAt: filledAt, entryFee: 0 };
+      }
+
+      const pos = positions[o.symbol];
+      const oldSize = pos.size;
+      const sizeChange = o.side === 'buy' ? sz : -sz;
+      const newSize = oldSize + sizeChange;
+
+      // How much of this order closes an existing position
+      let closingSize = 0;
+      if (o.side === 'sell' && oldSize > 0) closingSize = Math.min(sz, oldSize);
+      else if (o.side === 'buy' && oldSize < 0) closingSize = Math.min(sz, Math.abs(oldSize));
+
+      if (closingSize > 0) {
+        const direction = oldSize > 0 ? 'long' : 'short';
+        const realizedPnl = direction === 'long'
+          ? closingSize * (price - pos.avgCost)
+          : closingSize * (pos.avgCost - price);
+
+        const entryFeeAlloc = pos.entryFee * (closingSize / Math.abs(oldSize));
+        const exitFeeAlloc = fee * (closingSize / sz);
+
+        completed.push({
+          symbol: o.symbol,
+          direction,
+          size: parseFloat(closingSize.toFixed(8)),
+          entryPrice: parseFloat(pos.avgCost.toFixed(8)),
+          exitPrice: price,
+          realizedPnl: parseFloat(realizedPnl.toFixed(8)),
+          totalFee: parseFloat((entryFeeAlloc + exitFeeAlloc).toFixed(8)),
+          closeReason: o.strategyId ? 'strategy' : 'manual',
+          openedAt: pos.openedAt.toISOString(),
+          closedAt: filledAt.toISOString(),
+        });
+      }
+
+      // Update position state
+      if (newSize === 0) {
+        positions[o.symbol] = { size: 0, avgCost: 0, openedAt: filledAt, entryFee: 0 };
+      } else if (oldSize !== 0 && Math.sign(newSize) !== Math.sign(oldSize)) {
+        // Position flipped — opening portion starts a fresh position
+        const openingSize = Math.abs(newSize);
+        positions[o.symbol] = {
+          size: newSize,
+          avgCost: price,
+          openedAt: filledAt,
+          entryFee: fee * (openingSize / sz),
+        };
+      } else if (oldSize === 0) {
+        // Fresh open
+        positions[o.symbol] = { size: newSize, avgCost: price, openedAt: filledAt, entryFee: fee };
+      } else if (Math.abs(newSize) > Math.abs(oldSize)) {
+        // Adding to position — weighted average cost
+        const addedSize = Math.abs(newSize) - Math.abs(oldSize);
+        pos.avgCost = (Math.abs(oldSize) * pos.avgCost + addedSize * price) / Math.abs(newSize);
+        pos.entryFee += fee;
+        pos.size = newSize;
+      } else {
+        // Partially reducing — keep avgCost, scale entryFee proportionally
+        pos.entryFee = pos.entryFee * (Math.abs(newSize) / Math.abs(oldSize));
+        pos.size = newSize;
+      }
+    }
+
+    // Newest first
+    completed.sort((a, b) => new Date(b.closedAt).getTime() - new Date(a.closedAt).getTime());
+
+    // Cursor pagination (cursor = closedAt ISO string of last seen item)
+    const slice = cursor ? completed.filter(t => t.closedAt < cursor) : completed;
+    const limitNum = Math.min(parseInt(limit) || 20, 100);
+    const hasMore = slice.length > limitNum;
+    const data = hasMore ? slice.slice(0, limitNum) : slice;
+
+    return reply.send({
+      data,
+      hasMore,
+      nextCursor: hasMore ? data[data.length - 1].closedAt : null,
+    });
+  });
+
   // DELETE /api/v1/users/:name/follow
   fastify.delete('/users/:name/follow', {
     preHandler: [authenticate],

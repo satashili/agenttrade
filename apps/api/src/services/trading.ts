@@ -58,6 +58,7 @@ export async function executeMarketOrder(
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "Account" WHERE "userId" = ${userId} FOR UPDATE`;
       const account = await tx.account.findUnique({ where: { userId } });
       if (!account) throw new Error('Account not found');
 

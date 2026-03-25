@@ -96,42 +96,50 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: `Max ${MAX_STRATEGIES_PER_USER} active strategies allowed` });
     }
 
-    // Check user's main account has enough cash
-    const account = await fastify.prisma.account.findUnique({ where: { userId: user.id } });
-    if (!account) return reply.status(400).send({ error: 'Account not found' });
-    const cashBalance = parseFloat(account.cashBalance.toString());
-    if (cashBalance < body.allocatedCapital) {
-      return reply.status(400).send({ error: `Insufficient balance. Need: $${body.allocatedCapital.toFixed(2)}, Have: $${cashBalance.toFixed(2)}` });
+    // Deduct from main account and create strategy in a single locked transaction
+    let strategy;
+    try {
+      strategy = await fastify.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT 1 FROM "Account" WHERE "userId" = ${user.id} FOR UPDATE`;
+        const account = await tx.account.findUnique({ where: { userId: user.id } });
+        if (!account) throw new Error('Account not found');
+        const cashBalance = parseFloat(account.cashBalance.toString());
+        if (cashBalance < body.allocatedCapital) {
+          throw new Error(`Insufficient balance. Need: $${body.allocatedCapital.toFixed(2)}, Have: $${cashBalance.toFixed(2)}`);
+        }
+
+        await tx.account.update({
+          where: { userId: user.id },
+          data: { cashBalance: { decrement: new Prisma.Decimal(body.allocatedCapital) } },
+        });
+
+        return tx.strategy.create({
+          data: {
+            userId: user.id,
+            name: body.name,
+            description: body.description || null,
+            symbol: body.symbol,
+            visibility: body.visibility || 'public',
+            config: {
+              entryConditions: body.entryConditions,
+              entryAction: body.entryAction,
+              exitConditions: body.exitConditions,
+              riskLimits: body.riskLimits || {},
+            } as unknown as Prisma.InputJsonValue,
+            checkIntervalSeconds: body.checkIntervalSeconds || 30,
+            allocatedCapital: new Prisma.Decimal(body.allocatedCapital),
+            currentCash: new Prisma.Decimal(body.allocatedCapital),
+            initialEquity: new Prisma.Decimal(body.allocatedCapital),
+          },
+          include: { user: userInclude, positions: true },
+        });
+      });
+    } catch (err: any) {
+      if (err.message.includes('Insufficient balance') || err.message === 'Account not found') {
+        return reply.status(400).send({ error: err.message });
+      }
+      throw err;
     }
-
-    // Deduct from main account and create strategy in a transaction
-    const strategy = await fastify.prisma.$transaction(async (tx) => {
-      await tx.account.update({
-        where: { userId: user.id },
-        data: { cashBalance: { decrement: new Prisma.Decimal(body.allocatedCapital) } },
-      });
-
-      return tx.strategy.create({
-        data: {
-          userId: user.id,
-          name: body.name,
-          description: body.description || null,
-          symbol: body.symbol,
-          visibility: body.visibility || 'public',
-          config: {
-            entryConditions: body.entryConditions,
-            entryAction: body.entryAction,
-            exitConditions: body.exitConditions,
-            riskLimits: body.riskLimits || {},
-          } as unknown as Prisma.InputJsonValue,
-          checkIntervalSeconds: body.checkIntervalSeconds || 30,
-          allocatedCapital: new Prisma.Decimal(body.allocatedCapital),
-          currentCash: new Prisma.Decimal(body.allocatedCapital),
-          initialEquity: new Prisma.Decimal(body.allocatedCapital),
-        },
-        include: { user: userInclude, positions: true },
-      });
-    });
 
     await fastify.prisma.strategyLog.create({
       data: { strategyId: strategy.id, event: 'created', details: { allocatedCapital: body.allocatedCapital } },
@@ -458,50 +466,55 @@ export default async function strategyRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: `Max ${MAX_STRATEGIES_PER_USER} active strategies allowed` });
     }
 
-    // Check user's main account has enough cash
-    const account = await fastify.prisma.account.findUnique({ where: { userId: user.id } });
-    if (!account) return reply.status(400).send({ error: 'Account not found' });
-    const cashBalance = parseFloat(account.cashBalance.toString());
-    if (cashBalance < body.allocatedCapital) {
-      return reply.status(400).send({ error: `Insufficient balance. Need: $${body.allocatedCapital.toFixed(2)}, Have: $${cashBalance.toFixed(2)}` });
+    let forked;
+    try {
+      forked = await fastify.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT 1 FROM "Account" WHERE "userId" = ${user.id} FOR UPDATE`;
+        const account = await tx.account.findUnique({ where: { userId: user.id } });
+        if (!account) throw new Error('Account not found');
+        const cashBalance = parseFloat(account.cashBalance.toString());
+        if (cashBalance < body.allocatedCapital!) {
+          throw new Error(`Insufficient balance. Need: $${body.allocatedCapital!.toFixed(2)}, Have: $${cashBalance.toFixed(2)}`);
+        }
+
+        await tx.account.update({
+          where: { userId: user.id },
+          data: { cashBalance: { decrement: new Prisma.Decimal(body.allocatedCapital!) } },
+        });
+
+        const created = await tx.strategy.create({
+          data: {
+            userId: user.id,
+            name: `${source.name} (fork)`,
+            description: source.description,
+            symbol: source.symbol,
+            visibility: 'public',
+            config: source.config as any,
+            checkIntervalSeconds: source.checkIntervalSeconds,
+            forkedFromId: source.id,
+            allocatedCapital: new Prisma.Decimal(body.allocatedCapital!),
+            currentCash: new Prisma.Decimal(body.allocatedCapital!),
+            initialEquity: new Prisma.Decimal(body.allocatedCapital!),
+            totalTrades: 0,
+            winCount: 0,
+            totalPnl: new Prisma.Decimal(0),
+          },
+          include: { user: userInclude, positions: true },
+        });
+
+        await tx.strategy.update({
+          where: { id: source.id },
+          data: { forkCount: { increment: 1 } },
+        });
+
+        return created;
+      });
+    } catch (err: any) {
+      if (err.message.includes('Insufficient balance') || err.message === 'Account not found') {
+        return reply.status(400).send({ error: err.message });
+      }
+      throw err;
     }
-
-    const forked = await fastify.prisma.$transaction(async (tx) => {
-      // Deduct from main account
-      await tx.account.update({
-        where: { userId: user.id },
-        data: { cashBalance: { decrement: new Prisma.Decimal(body.allocatedCapital!) } },
-      });
-
-      // Create forked strategy with fresh stats
-      const created = await tx.strategy.create({
-        data: {
-          userId: user.id,
-          name: `${source.name} (fork)`,
-          description: source.description,
-          symbol: source.symbol,
-          visibility: 'public',
-          config: source.config as any,
-          checkIntervalSeconds: source.checkIntervalSeconds,
-          forkedFromId: source.id,
-          allocatedCapital: new Prisma.Decimal(body.allocatedCapital!),
-          currentCash: new Prisma.Decimal(body.allocatedCapital!),
-          initialEquity: new Prisma.Decimal(body.allocatedCapital!),
-          totalTrades: 0,
-          winCount: 0,
-          totalPnl: new Prisma.Decimal(0),
-        },
-        include: { user: userInclude, positions: true },
-      });
-
-      // Increment fork count on source
-      await tx.strategy.update({
-        where: { id: source.id },
-        data: { forkCount: { increment: 1 } },
-      });
-
-      return created;
-    });
 
     return reply.status(201).send(serializeStrategy(forked));
   });
