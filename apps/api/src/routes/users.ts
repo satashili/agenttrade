@@ -191,7 +191,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     return reply.send({ a: agentA, b: agentB });
   });
 
-  // GET /api/v1/users/:name/trades — Public completed trade history (round-trip FIFO replay)
+  // GET /api/v1/users/:name/trades — Public full order history with FIFO PnL
   fastify.get('/users/:name/trades', async (request, reply) => {
     const { name } = request.params as { name: string };
     const { limit = '20', cursor } = request.query as Record<string, string>;
@@ -202,7 +202,6 @@ export default async function userRoutes(fastify: FastifyInstance) {
     });
     if (!user) return reply.status(404).send({ error: 'User not found' });
 
-    // All filled orders oldest-first for FIFO replay
     const orders = await fastify.prisma.order.findMany({
       where: { userId: user.id, status: 'filled' },
       orderBy: { filledAt: 'asc' },
@@ -212,15 +211,22 @@ export default async function userRoutes(fastify: FastifyInstance) {
       },
     });
 
-    interface PosState { size: number; avgCost: number; openedAt: Date; entryFee: number; }
+    interface PosState { size: number; avgCost: number; }
     const positions: Record<string, PosState> = {};
 
-    const completed: Array<{
-      symbol: string; direction: string; size: number;
-      entryPrice: number; exitPrice: number;
-      realizedPnl: number; totalFee: number;
-      closeReason: string; openedAt: string; closedAt: string;
-    }> = [];
+    interface TradeRecord {
+      symbol: string;
+      side: string;
+      action: 'open' | 'close' | 'add' | 'reduce' | 'flip';
+      size: number;
+      price: number;
+      fee: number;
+      realizedPnl: number | null;
+      positionAfter: number;
+      reason: string;
+      filledAt: string;
+    }
+    const trades: TradeRecord[] = [];
 
     for (const o of orders) {
       const sz = parseFloat(o.size.toString());
@@ -228,76 +234,73 @@ export default async function userRoutes(fastify: FastifyInstance) {
       const fee = parseFloat(o.fee!.toString());
       const filledAt = o.filledAt!;
 
-      if (!positions[o.symbol]) {
-        positions[o.symbol] = { size: 0, avgCost: 0, openedAt: filledAt, entryFee: 0 };
-      }
-
+      if (!positions[o.symbol]) positions[o.symbol] = { size: 0, avgCost: 0 };
       const pos = positions[o.symbol];
       const oldSize = pos.size;
       const sizeChange = o.side === 'buy' ? sz : -sz;
       const newSize = oldSize + sizeChange;
 
-      // How much of this order closes an existing position
+      // Determine closing portion and realized PnL
       let closingSize = 0;
       if (o.side === 'sell' && oldSize > 0) closingSize = Math.min(sz, oldSize);
       else if (o.side === 'buy' && oldSize < 0) closingSize = Math.min(sz, Math.abs(oldSize));
 
+      let realizedPnl: number | null = null;
       if (closingSize > 0) {
-        const direction = oldSize > 0 ? 'long' : 'short';
-        const realizedPnl = direction === 'long'
+        const dir = oldSize > 0 ? 'long' : 'short';
+        realizedPnl = dir === 'long'
           ? closingSize * (price - pos.avgCost)
           : closingSize * (pos.avgCost - price);
-
-        const entryFeeAlloc = pos.entryFee * (closingSize / Math.abs(oldSize));
-        const exitFeeAlloc = fee * (closingSize / sz);
-
-        completed.push({
-          symbol: o.symbol,
-          direction,
-          size: parseFloat(closingSize.toFixed(8)),
-          entryPrice: parseFloat(pos.avgCost.toFixed(8)),
-          exitPrice: price,
-          realizedPnl: parseFloat(realizedPnl.toFixed(8)),
-          totalFee: parseFloat((entryFeeAlloc + exitFeeAlloc).toFixed(8)),
-          closeReason: o.strategyId ? 'strategy' : 'manual',
-          openedAt: pos.openedAt.toISOString(),
-          closedAt: filledAt.toISOString(),
-        });
+        realizedPnl = parseFloat(realizedPnl.toFixed(8));
       }
+
+      // Classify action
+      let action: TradeRecord['action'];
+      if (oldSize === 0) {
+        action = 'open';
+      } else if (newSize === 0) {
+        action = 'close';
+      } else if (Math.sign(newSize) !== Math.sign(oldSize)) {
+        action = 'flip';
+      } else if (Math.abs(newSize) > Math.abs(oldSize)) {
+        action = 'add';
+      } else {
+        action = 'reduce';
+      }
+
+      trades.push({
+        symbol: o.symbol,
+        side: o.side as string,
+        action,
+        size: parseFloat(sz.toFixed(8)),
+        price,
+        fee: parseFloat(fee.toFixed(8)),
+        realizedPnl,
+        positionAfter: parseFloat(newSize.toFixed(8)),
+        reason: o.strategyId ? 'strategy' : 'manual',
+        filledAt: filledAt.toISOString(),
+      });
 
       // Update position state
       if (newSize === 0) {
-        positions[o.symbol] = { size: 0, avgCost: 0, openedAt: filledAt, entryFee: 0 };
+        pos.size = 0; pos.avgCost = 0;
       } else if (oldSize !== 0 && Math.sign(newSize) !== Math.sign(oldSize)) {
-        // Position flipped — opening portion starts a fresh position
-        const openingSize = Math.abs(newSize);
-        positions[o.symbol] = {
-          size: newSize,
-          avgCost: price,
-          openedAt: filledAt,
-          entryFee: fee * (openingSize / sz),
-        };
+        pos.size = newSize; pos.avgCost = price;
       } else if (oldSize === 0) {
-        // Fresh open
-        positions[o.symbol] = { size: newSize, avgCost: price, openedAt: filledAt, entryFee: fee };
+        pos.size = newSize; pos.avgCost = price;
       } else if (Math.abs(newSize) > Math.abs(oldSize)) {
-        // Adding to position — weighted average cost
-        const addedSize = Math.abs(newSize) - Math.abs(oldSize);
-        pos.avgCost = (Math.abs(oldSize) * pos.avgCost + addedSize * price) / Math.abs(newSize);
-        pos.entryFee += fee;
+        const added = Math.abs(newSize) - Math.abs(oldSize);
+        pos.avgCost = (Math.abs(oldSize) * pos.avgCost + added * price) / Math.abs(newSize);
         pos.size = newSize;
       } else {
-        // Partially reducing — keep avgCost, scale entryFee proportionally
-        pos.entryFee = pos.entryFee * (Math.abs(newSize) / Math.abs(oldSize));
         pos.size = newSize;
       }
     }
 
     // Newest first
-    completed.sort((a, b) => new Date(b.closedAt).getTime() - new Date(a.closedAt).getTime());
+    trades.reverse();
 
-    // Cursor pagination (cursor = closedAt ISO string of last seen item)
-    const slice = cursor ? completed.filter(t => t.closedAt < cursor) : completed;
+    const slice = cursor ? trades.filter(t => t.filledAt < cursor) : trades;
     const limitNum = Math.min(parseInt(limit) || 20, 100);
     const hasMore = slice.length > limitNum;
     const data = hasMore ? slice.slice(0, limitNum) : slice;
@@ -305,7 +308,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     return reply.send({
       data,
       hasMore,
-      nextCursor: hasMore ? data[data.length - 1].closedAt : null,
+      nextCursor: hasMore ? data[data.length - 1].filledAt : null,
     });
   });
 
