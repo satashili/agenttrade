@@ -29,9 +29,11 @@ export function Navbar() {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
+  const agentDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close mobile menu on route change
-  useEffect(() => { setMobileMenuOpen(false); }, [pathname]);
+  // Close menus on route change
+  useEffect(() => { setMobileMenuOpen(false); setAgentDropdownOpen(false); }, [pathname]);
 
   // Close mobile menu on outside click
   useEffect(() => {
@@ -44,6 +46,18 @@ export function Navbar() {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [mobileMenuOpen]);
+
+  // Close agent dropdown on outside click
+  useEffect(() => {
+    if (!agentDropdownOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
+        setAgentDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [agentDropdownOpen]);
 
   const navLinks = [
     { href: '/trade', label: 'Trade' },
@@ -142,6 +156,21 @@ export function Navbar() {
                   <Link href={`/u/${user.name}`} className="block px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5">
                     Profile
                   </Link>
+                  {user.ownedAgents && user.ownedAgents.length > 0 && (
+                    <>
+                      <div className="px-4 pt-2 pb-1 text-[10px] text-slate-500 uppercase tracking-wider">My Agents</div>
+                      {user.ownedAgents.map(agent => (
+                        <Link
+                          key={agent.id}
+                          href={`/u/${agent.name}`}
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-[#0ECB81] hover:text-white hover:bg-white/5 transition-colors"
+                        >
+                          <span className="text-[10px]">🤖</span>
+                          <span className="truncate">{agent.displayName || agent.name}</span>
+                        </Link>
+                      ))}
+                    </>
+                  )}
                   <button onClick={logout} className="block w-full text-left px-4 py-2 text-sm text-slate-500 hover:text-white hover:bg-white/5">
                     Logout
                   </button>
@@ -164,14 +193,49 @@ export function Navbar() {
         <div className="flex items-center gap-3">
           {user ? (
             <>
-              {user.ownedAgents && user.ownedAgents.length > 0 && (
+              {user.ownedAgents && user.ownedAgents.length === 1 && (
                 <Link
                   href={`/u/${user.ownedAgents[0].name}`}
                   className="text-xs text-[#0ECB81] hover:text-[#0ECB81]/80 flex items-center gap-1 font-medium"
                 >
                   <span className="text-[10px]">🤖</span>
-                  My Agent: {user.ownedAgents[0].displayName || user.ownedAgents[0].name}
+                  {user.ownedAgents[0].displayName || user.ownedAgents[0].name}
                 </Link>
+              )}
+              {user.ownedAgents && user.ownedAgents.length > 1 && (
+                <div className="relative" ref={agentDropdownRef}>
+                  <button
+                    onClick={() => setAgentDropdownOpen(v => !v)}
+                    className="text-xs text-[#0ECB81] hover:text-[#0ECB81]/80 flex items-center gap-1 font-medium"
+                  >
+                    <span className="text-[10px]">🤖</span>
+                    My Agents ({user.ownedAgents.length})
+                    <svg
+                      width="10" height="10" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+                      className={clsx('transition-transform', agentDropdownOpen ? 'rotate-180' : '')}
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  {agentDropdownOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-52 bg-bg-card border border-border rounded-xl py-1.5 shadow-xl z-50">
+                      <div className="px-3 py-1 text-[10px] text-slate-500 uppercase tracking-wider">My Agents</div>
+                      {user.ownedAgents.map(agent => (
+                        <Link
+                          key={agent.id}
+                          href={`/u/${agent.name}`}
+                          onClick={() => setAgentDropdownOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-white/5 transition-colors"
+                        >
+                          <span className="w-5 h-5 rounded-full bg-[#0ECB81]/10 border border-[#0ECB81]/30 flex items-center justify-center text-[10px] shrink-0">🤖</span>
+                          <span className="truncate">{agent.displayName || agent.name}</span>
+                          <span className="ml-auto text-slate-600 text-[10px] shrink-0">@{agent.name}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
               <Link href={`/u/${user.name}`} className="text-xs text-slate-300 hover:text-white flex items-center gap-1.5">
                 <span className="w-5 h-5 rounded-full bg-[#1E6FFF]/20 flex items-center justify-center text-[10px] font-bold text-[#1E6FFF]">
