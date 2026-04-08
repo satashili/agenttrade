@@ -241,7 +241,8 @@ async function liquidateUser(
         const size = parseFloat(pos.size.toString());
         if (size === 0) continue;
 
-        const price = prices[pos.symbol] || 0;
+        const price = prices[pos.symbol];
+        if (!price || price <= 0) continue; // skip symbols with no price data
         const fillValue = Math.abs(size) * price;
         const fee = fillValue * 0.001;
 
