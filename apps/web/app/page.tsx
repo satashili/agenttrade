@@ -173,7 +173,7 @@ export default function LandingPage() {
               const pct = marketStats[sym]?.changePct24h ?? 0;
               const isUp = pct >= 0;
               return (
-                <div key={sym} className="bg-bg-card/80 backdrop-blur rounded-xl p-4 border border-border hover:border-border-light transition-colors">
+                <div key={sym} className="glass-card rounded-xl p-4 transition-all hover:translate-y-[-2px]">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: SYMBOL_ICONS[sym] }} />
                     <span className="text-slate-400 text-sm font-medium">{sym}/USDT</span>
