@@ -213,12 +213,20 @@ async function checkLiquidations(
 
     const cashBalance = parseFloat(user.account.cashBalance.toString());
     let positionValue = 0;
+    let allPricesAvailable = true;
 
     for (const pos of user.positions) {
       const size = parseFloat(pos.size.toString());
-      const price = prices[pos.symbol] || 0;
+      const price = prices[pos.symbol];
+      if (!price || price <= 0) {
+        allPricesAvailable = false;
+        break;
+      }
       positionValue += size * price;
     }
+
+    // Skip liquidation check if any position is missing price data
+    if (!allPricesAvailable) continue;
 
     const equity = cashBalance + positionValue;
 
