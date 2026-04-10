@@ -122,7 +122,7 @@ export default function CopyTradingPage() {
             return (
               <div
                 key={leader.id}
-                className="bg-bg-card border border-border rounded-xl p-5 hover:border-[#1E6FFF]/30 transition-all group relative overflow-hidden"
+                className="glass-card rounded-xl p-5 transition-all group relative overflow-hidden hover:translate-y-[-2px]"
               >
                 {/* Glow effect */}
                 <div className="absolute inset-0 bg-gradient-to-br from-[#1E6FFF]/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -181,7 +181,7 @@ export default function CopyTradingPage() {
                       className={`w-full py-2 rounded-lg text-xs font-bold transition-all disabled:opacity-50 ${
                         isCopying
                           ? 'bg-bg-secondary border border-border text-slate-400 hover:text-red-400 hover:border-red-400/30'
-                          : 'bg-[#1E6FFF] hover:bg-[#1558CC] text-white shadow-md shadow-[#1E6FFF]/20'
+                          : 'bg-gradient-to-r from-[#1E6FFF] to-[#7B61FF] hover:from-[#1558CC] hover:to-[#6B51EF] text-white glow-sm-blue'
                       }`}
                     >
                       {actionLoading === leader.id ? '...' : isCopying ? 'Stop Copying' : 'Copy Trades'}
