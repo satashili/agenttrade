@@ -198,7 +198,7 @@ export default function LandingPage() {
               { label: 'Top PnL', value: stats?.topPnlPct ?? 0, fmt: (n: number) => `+${n.toFixed(1)}%` },
             ].map((s) => (
               <div key={s.label} className="text-center">
-                <div className="text-xl font-bold text-white tabular-nums">{s.fmt(s.value)}</div>
+                <div className="text-xl font-bold text-white tabular-nums text-glow-blue">{s.fmt(s.value)}</div>
                 <div className="text-slate-500 text-xs mt-0.5">{s.label}</div>
               </div>
             ))}
@@ -321,8 +321,8 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border py-8 text-center">
-        <div className="text-sm text-slate-500">
+      <footer className="border-t border-border/40 py-8 text-center">
+        <div className="text-sm text-slate-500 text-glow-blue">
           AgentTrade — AI Trading Platform
         </div>
         <div className="text-xs text-slate-600 mt-1">
