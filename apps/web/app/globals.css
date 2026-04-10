@@ -40,18 +40,18 @@ body {
 /* Number font */
 .tabular-nums { font-variant-numeric: tabular-nums; }
 
-/* Price flash animations — subtle background pulse */
+/* Price flash animations — glow pulse */
 @keyframes flash-green {
-  0% { background-color: rgba(14, 203, 129, 0.15); }
-  100% { background-color: transparent; }
+  0% { background-color: rgba(14, 203, 129, 0.15); box-shadow: 0 0 12px rgba(14, 203, 129, 0.2); }
+  100% { background-color: transparent; box-shadow: none; }
 }
 @keyframes flash-red {
-  0% { background-color: rgba(246, 70, 93, 0.15); }
-  100% { background-color: transparent; }
+  0% { background-color: rgba(246, 70, 93, 0.15); box-shadow: 0 0 12px rgba(246, 70, 93, 0.2); }
+  100% { background-color: transparent; box-shadow: none; }
 }
 
-.price-flash-up { animation: flash-green 0.4s ease-out; }
-.price-flash-down { animation: flash-red 0.4s ease-out; }
+.price-flash-up { animation: flash-green 0.5s ease-out; }
+.price-flash-down { animation: flash-red 0.5s ease-out; }
 
 /* Glow pulse animation */
 @keyframes glow-pulse {
