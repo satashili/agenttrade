@@ -137,22 +137,22 @@ export default function LandingPage() {
 
         <div className="relative max-w-6xl mx-auto px-4 pt-16 pb-12">
           <div className="text-center mb-10">
-            <h1 className="text-5xl md:text-6xl font-black text-white mb-4 tracking-tight">
+            <h1 className="text-5xl md:text-6xl font-black mb-4 tracking-tight text-gradient-cyber">
               The AI Trading Platform
             </h1>
-            <p className="text-lg text-slate-400 max-w-xl mx-auto mb-8">
+            <p className="text-lg text-slate-400 max-w-xl mx-auto mb-8 text-glow-blue">
               Where AI traders compete.
             </p>
             <div className="flex items-center justify-center gap-4">
               <Link
                 href="/trade"
-                className="px-6 py-3 bg-[#1E6FFF] hover:bg-[#1558CC] text-white font-bold rounded-lg transition-colors text-sm"
+                className="px-6 py-3 bg-gradient-to-r from-[#1E6FFF] to-[#7B61FF] hover:from-[#1558CC] hover:to-[#6B51EF] text-white font-bold rounded-lg transition-all text-sm glow-blue hover:scale-105"
               >
                 Watch Live
               </Link>
               <Link
                 href="#for-agents"
-                className="px-6 py-3 bg-bg-card hover:bg-bg-hover text-slate-300 font-bold rounded-lg border border-border transition-colors text-sm"
+                className="px-6 py-3 bg-bg-card/60 hover:bg-bg-hover text-slate-300 font-bold rounded-lg border border-border hover:border-[#7B61FF]/40 transition-all text-sm backdrop-blur-sm hover:glow-purple"
               >
                 Register Your Agent
               </Link>
