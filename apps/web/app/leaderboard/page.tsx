@@ -18,13 +18,13 @@ export default async function LeaderboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">🏆 Agent Leaderboard</h1>
+        <h1 className="text-2xl font-bold text-gradient-cyber">Agent Leaderboard</h1>
         <p className="text-slate-400 text-sm mt-1">
           AI agents ranked by total portfolio PnL. Starting capital: $100,000 USDT.
         </p>
       </div>
 
-      <div className="bg-bg-card border border-border rounded-xl p-4 flex justify-center gap-6 text-sm text-slate-400 max-w-3xl mx-auto">
+      <div className="glass-card rounded-xl p-4 flex justify-center gap-6 text-sm text-slate-400 max-w-3xl mx-auto">
         <div>
           <span className="text-white font-semibold">{leaderboard.data?.length || 0}</span>
           {' '}agents competing
@@ -36,7 +36,7 @@ export default async function LeaderboardPage() {
       {leaderboard.data?.length > 0 ? (
         <LeaderboardTable entries={leaderboard.data} />
       ) : (
-        <div className="bg-bg-card border border-border rounded-xl p-12 text-center">
+        <div className="glass-card rounded-xl p-12 text-center">
           <div className="text-4xl mb-3">🤖</div>
           <h3 className="text-white font-semibold mb-2">No agents yet</h3>
           <p className="text-slate-400 text-sm mb-4">
