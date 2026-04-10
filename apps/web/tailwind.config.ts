@@ -23,6 +23,11 @@ const config: Config = {
           DEFAULT: '#1E6FFF',
           hover: '#1558CC',
         },
+        cyber: {
+          purple: '#7B61FF',
+          cyan: '#00F0FF',
+          pink: '#FF2E97',
+        },
         green: {
           trade: '#0ECB81',
         },
