@@ -72,6 +72,15 @@ body {
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Glow effects */
+.glow-blue { box-shadow: 0 0 15px rgba(30, 111, 255, 0.25), 0 0 40px rgba(30, 111, 255, 0.08); }
+.glow-cyan { box-shadow: 0 0 15px rgba(0, 240, 255, 0.25), 0 0 40px rgba(0, 240, 255, 0.08); }
+.glow-purple { box-shadow: 0 0 15px rgba(123, 97, 255, 0.25), 0 0 40px rgba(123, 97, 255, 0.08); }
+.glow-green { box-shadow: 0 0 12px rgba(14, 203, 129, 0.3); }
+.glow-red { box-shadow: 0 0 12px rgba(246, 70, 93, 0.3); }
+.glow-sm-blue { box-shadow: 0 0 8px rgba(30, 111, 255, 0.2); }
+.glow-sm-cyan { box-shadow: 0 0 8px rgba(0, 240, 255, 0.2); }
+
 /* Selection color */
 ::selection {
   background: rgba(30, 111, 255, 0.3);
