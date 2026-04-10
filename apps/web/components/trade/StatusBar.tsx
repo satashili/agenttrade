@@ -39,10 +39,10 @@ export function StatusBar() {
   }, [token, fetchPnl]);
 
   return (
-    <div className="flex items-center h-7 px-3 border-b border-border/60 bg-[#0B0E11] text-[10px] shrink-0 gap-4">
+    <div className="flex items-center h-7 px-3 border-b border-border/40 glass-panel text-[10px] shrink-0 gap-4">
       <div className="flex items-center gap-1.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-[#0ECB81] animate-pulse" />
-        <span className="text-slate-500 font-medium">LIVE</span>
+        <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF] animate-pulse glow-sm-cyan" />
+        <span className="text-[#00F0FF]/70 font-medium">LIVE</span>
         {stats && <span className="text-slate-400 tabular-nums">{stats.agentCount} agents</span>}
       </div>
       <span className="text-slate-600">|</span>

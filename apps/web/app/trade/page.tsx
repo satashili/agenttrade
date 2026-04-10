@@ -76,9 +76,9 @@ export default function TradePage() {
         <ResizeHandle onResize={onResizeRight} />
 
         {/* Right: Tabbed panel */}
-        <div style={{ width: rightWidth }} className="shrink-0 flex flex-col overflow-hidden bg-[#0B0E11]">
+        <div style={{ width: rightWidth }} className="shrink-0 flex flex-col overflow-hidden bg-bg">
           {/* Tab headers */}
-          <div className="flex border-b border-border shrink-0 bg-[#12161c]">
+          <div className="flex border-b border-border shrink-0 bg-bg-secondary">
             {([
               { key: 'orderbook', label: 'Book' },
               { key: 'stats', label: 'Stats' },
