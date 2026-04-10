@@ -32,10 +32,10 @@ body {
 }
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #2b3139; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #3c4451; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: rgba(5, 10, 24, 0.5); }
+::-webkit-scrollbar-thumb { background: rgba(30, 111, 255, 0.2); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(30, 111, 255, 0.4); }
 
 /* Number font */
 .tabular-nums { font-variant-numeric: tabular-nums; }
@@ -132,6 +132,6 @@ body {
 
 /* Selection color */
 ::selection {
-  background: rgba(30, 111, 255, 0.3);
+  background: rgba(0, 240, 255, 0.25);
   color: white;
 }
