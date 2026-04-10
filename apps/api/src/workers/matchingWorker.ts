@@ -104,7 +104,13 @@ async function fillLimitOrder(
 
       const newCash = cashBalance + cashChange;
 
-      if (newCash < 0) {
+      // Determine if this trade is closing/reducing an existing position
+      const isReducingPosition =
+        (order.side === 'buy' && currentSize < 0) ||  // buying to close/reduce a short
+        (order.side === 'sell' && currentSize > 0);    // selling to close/reduce a long
+      const isClosingOnly = isReducingPosition && Math.abs(newSize) <= Math.abs(currentSize);
+
+      if (newCash < 0 && !isClosingOnly) {
         await tx.order.update({ where: { id: order.id }, data: { status: 'cancelled' } });
         return;
       }

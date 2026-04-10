@@ -86,8 +86,16 @@ export async function executeMarketOrder(
 
       const newCash = cashBalance + cashChange;
 
-      // Check: new cash cannot be negative
-      if (newCash < 0) {
+      // Determine if this trade is closing/reducing an existing position
+      const isReducingPosition =
+        (side === 'buy' && currentSize < 0) ||  // buying to close/reduce a short
+        (side === 'sell' && currentSize > 0);    // selling to close/reduce a long
+      const isClosingOnly = isReducingPosition && Math.abs(newSize) <= Math.abs(currentSize);
+
+      // Cash check: only enforce for opening new positions or increasing exposure.
+      // When closing/reducing a position, the cash from the original open is already
+      // deployed in other positions, so we rely on equity/margin checks instead.
+      if (newCash < 0 && !isClosingOnly) {
         throw new Error(`Insufficient balance. Required: $${(-cashChange).toFixed(2)}, Available: $${cashBalance.toFixed(2)}`);
       }
 
