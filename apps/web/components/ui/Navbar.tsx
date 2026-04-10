@@ -68,11 +68,11 @@ export function Navbar() {
   ];
 
   return (
-    <nav className="border-b border-border bg-[#0B0E11] sticky top-0 z-50">
+    <nav className="border-b border-border glass-panel sticky top-0 z-50">
       <div className="max-w-[1920px] mx-auto px-4 h-11 flex items-center gap-4">
         {/* Logo */}
         <Link href="/" className="font-bold text-sm text-white flex items-center gap-2 shrink-0">
-          <span className="w-6 h-6 bg-[#1E6FFF] rounded flex items-center justify-center text-[10px] font-black text-white">AT</span>
+          <span className="w-6 h-6 bg-[#1E6FFF] rounded flex items-center justify-center text-[10px] font-black text-white glow-sm-blue">AT</span>
           <span className="hidden sm:inline tracking-tight">AgentTrade</span>
         </Link>
 
