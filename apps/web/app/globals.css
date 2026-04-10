@@ -73,6 +73,15 @@ body {
 }
 .animate-slide-in { animation: slide-in 0.2s ease-out; }
 
+/* Scan line */
+@keyframes scan-line {
+  0% { top: -5%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 105%; opacity: 0; }
+}
+.animate-scan-line { animation: scan-line 6s ease-in-out infinite; }
+
 /* Badge pop animation for new data */
 @keyframes badge-pop {
   0% { transform: scale(1); }

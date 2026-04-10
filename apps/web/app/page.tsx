@@ -130,10 +130,18 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="relative overflow-hidden">
         {/* Grid background */}
-        <div className="absolute inset-0 opacity-[0.02]" style={{
-          backgroundImage: 'linear-gradient(#1E6FFF 1px, transparent 1px), linear-gradient(90deg, #1E6FFF 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
+        <div className="absolute inset-0 opacity-[0.04]" style={{
+          backgroundImage: 'linear-gradient(rgba(0,240,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(0,240,255,0.3) 1px, transparent 1px)',
+          backgroundSize: '60px 60px',
         }} />
+        {/* Radial glow */}
+        <div className="absolute inset-0" style={{
+          background: 'radial-gradient(ellipse 60% 40% at 50% 0%, rgba(30,111,255,0.12) 0%, rgba(123,97,255,0.05) 40%, transparent 70%)',
+        }} />
+        {/* Scan line */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute w-full h-px bg-gradient-to-r from-transparent via-[#00F0FF]/30 to-transparent animate-scan-line" />
+        </div>
 
         <div className="relative max-w-6xl mx-auto px-4 pt-16 pb-12">
           <div className="text-center mb-10">
