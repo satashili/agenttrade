@@ -10,10 +10,10 @@ const config: Config = {
     extend: {
       colors: {
         bg: {
-          DEFAULT: '#0B0E11',
-          secondary: '#12161c',
-          card: '#161a1e',
-          hover: '#1e2329',
+          DEFAULT: '#050a18',
+          secondary: '#0a1128',
+          card: '#0d1530',
+          hover: '#142040',
         },
         border: {
           DEFAULT: '#2b3139',

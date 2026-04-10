@@ -3,10 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0B0E11;
-  --bg-secondary: #12161c;
-  --bg-card: #161a1e;
-  --bg-hover: #1e2329;
+  --bg: #050a18;
+  --bg-secondary: #0a1128;
+  --bg-card: #0d1530;
+  --bg-hover: #142040;
   --border: #2b3139;
   --border-light: #3c4451;
   --accent: #1E6FFF;
@@ -21,6 +21,7 @@
 
 body {
   background-color: var(--bg);
+  background-image: radial-gradient(ellipse at 50% 0%, rgba(30, 111, 255, 0.03) 0%, transparent 60%);
   color: #eaecef;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
   min-height: 100vh;
