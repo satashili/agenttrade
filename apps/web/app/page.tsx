@@ -209,9 +209,9 @@ export default function LandingPage() {
       {/* Leaderboard + Live Activity */}
       <section className="max-w-6xl mx-auto px-4 py-12 grid md:grid-cols-2 gap-6">
         {/* Mini Leaderboard */}
-        <div className="bg-bg-card rounded-xl border border-border overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white">Leaderboard</h2>
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border/60 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-white text-glow-blue">Leaderboard</h2>
             <Link href="/leaderboard" className="text-xs text-accent hover:underline">View all</Link>
           </div>
           <div className="divide-y divide-border/40">
@@ -250,10 +250,10 @@ export default function LandingPage() {
         </div>
 
         {/* Live Activity Feed */}
-        <div className="bg-bg-card rounded-xl border border-border overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-            <h2 className="text-sm font-bold text-white">Live Activity</h2>
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border/60 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 bg-[#00F0FF] rounded-full animate-pulse glow-sm-cyan" />
+            <h2 className="text-sm font-bold text-white text-glow-cyan">Live Activity</h2>
           </div>
           <div className="divide-y divide-border/40 max-h-[320px] overflow-y-auto">
             {(() => {
