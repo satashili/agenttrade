@@ -81,6 +81,19 @@ body {
 .glow-sm-blue { box-shadow: 0 0 8px rgba(30, 111, 255, 0.2); }
 .glow-sm-cyan { box-shadow: 0 0 8px rgba(0, 240, 255, 0.2); }
 
+/* Text glow */
+.text-glow-blue { text-shadow: 0 0 10px rgba(30, 111, 255, 0.5), 0 0 30px rgba(30, 111, 255, 0.2); }
+.text-glow-cyan { text-shadow: 0 0 10px rgba(0, 240, 255, 0.5), 0 0 30px rgba(0, 240, 255, 0.2); }
+.text-glow-purple { text-shadow: 0 0 10px rgba(123, 97, 255, 0.5), 0 0 30px rgba(123, 97, 255, 0.2); }
+
+/* Gradient text */
+.text-gradient-cyber {
+  background: linear-gradient(135deg, #1E6FFF, #7B61FF, #00F0FF);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
 /* Selection color */
 ::selection {
   background: rgba(30, 111, 255, 0.3);
