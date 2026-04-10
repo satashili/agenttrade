@@ -16,8 +16,8 @@ const config: Config = {
           hover: '#142040',
         },
         border: {
-          DEFAULT: '#2b3139',
-          light: '#3c4451',
+          DEFAULT: '#1a2744',
+          light: '#253a5c',
         },
         accent: {
           DEFAULT: '#1E6FFF',
