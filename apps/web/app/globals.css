@@ -139,6 +139,28 @@ body {
   background-clip: text;
 }
 
+/* Gradient border utility */
+.border-gradient {
+  position: relative;
+}
+.border-gradient::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(30,111,255,0.3), rgba(123,97,255,0.2), rgba(0,240,255,0.3));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Focus glow for inputs */
+input:focus, select:focus, textarea:focus {
+  box-shadow: 0 0 0 1px rgba(30, 111, 255, 0.3), 0 0 12px rgba(30, 111, 255, 0.1);
+}
+
 /* Selection color */
 ::selection {
   background: rgba(0, 240, 255, 0.25);

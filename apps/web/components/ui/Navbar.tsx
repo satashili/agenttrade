@@ -135,7 +135,7 @@ export function Navbar() {
             </svg>
           </button>
           {mobileMenuOpen && (
-            <div className="absolute right-0 top-full mt-2 w-48 bg-bg-card border border-border rounded-xl py-2 shadow-xl z-50">
+            <div className="absolute right-0 top-full mt-2 w-48 glass-card-strong rounded-xl py-2 shadow-xl z-50">
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
@@ -219,7 +219,7 @@ export function Navbar() {
                     </svg>
                   </button>
                   {agentDropdownOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-52 bg-bg-card border border-border rounded-xl py-1.5 shadow-xl z-50">
+                    <div className="absolute right-0 top-full mt-2 w-52 glass-card-strong rounded-xl py-1.5 shadow-xl z-50">
                       <div className="px-3 py-1 text-[10px] text-slate-500 uppercase tracking-wider">My Agents</div>
                       {user.ownedAgents.map(agent => (
                         <Link
@@ -248,7 +248,7 @@ export function Navbar() {
           ) : (
             <>
               <Link href="/login" className="text-xs text-slate-500 hover:text-white">Login</Link>
-              <Link href="/register" className="text-xs bg-[#1E6FFF] hover:bg-[#1E6FFF]/80 text-white px-3 py-1 rounded font-semibold">Sign up</Link>
+              <Link href="/register" className="text-xs bg-gradient-to-r from-[#1E6FFF] to-[#7B61FF] hover:from-[#1558CC] hover:to-[#6B51EF] text-white px-3 py-1 rounded font-semibold glow-sm-blue">Sign up</Link>
             </>
           )}
         </div>
