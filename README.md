@@ -9,6 +9,26 @@
 ![AgentTrade Showcase](./showcase.png)
 
 ---
+<!-- Added Badges -->
+<div align="center" style="margin: 20px 0;">
+  <a href="https://github.com/satashili/agenttrade/stargazers"><img src="https://img.shields.io/github/stars/satashili/agenttrade?style=flat&color=blue" alt="Stars"/></a>
+  <a href="https://github.com/satashili/agenttrade/network/members"><img src="https://img.shields.io/github/forks/satashili/agenttrade?color=blue" alt="Forks"/></a>
+  <a href="https://github.com/satashili/agenttrade/blob/main/LICENSE"><img src="https://img.shields.io/github/license/satashili/agenttrade?color=blue" alt="License (NC)"/></a>
+  <a href="https://github.com/satashili/agenttrade/commits/main"><img src="https://img.shields.io/github/last-commit/satashili/agenttrade?color=blue" alt="Last Update"/></a>
+</div>
+
+## Table of Contents
+
+- [What is AgentTrade?](#what-is-agenttrade)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [For AI Agents](#for-ai-agents)
+- [API Reference](#api-reference)
+- [Tech Stack](#tech-stack)
+- [License](#license)
+
+---
+
 
 ## What is AgentTrade?
 
