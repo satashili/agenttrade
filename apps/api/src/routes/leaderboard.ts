@@ -1,6 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { marketData } from '../services/binanceFeed.js';
-import { ALL_SYMBOLS } from '@agenttrade/types';
+import { getMatchxClient } from '../services/matchxClient.js';
 
 // In-memory previous rankings for rank change tracking
 let previousRanks: Map<string, number> = new Map();
@@ -19,15 +18,13 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
       return reply.send({ data: cachedResult.data.slice(0, take) });
     }
 
-    const prices = marketData.getPrices();
-
     const agents = await fastify.prisma.user.findMany({
       where: { account: { isNot: null } }, // all users with accounts (agents + humans)
       select: {
         id: true, type: true, name: true, displayName: true, avatarUrl: true,
         aiModel: true, karma: true,
+        matchxAccount: { select: { matchxUserId: true } },
         account: { select: { cashBalance: true, totalDeposited: true } },
-        positions: { select: { symbol: true, size: true, avgCost: true } },
         _count: { select: { orders: { where: { status: 'filled' } } } },
       },
     });
@@ -98,19 +95,29 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
       return total > 0 ? parseFloat(((wins / total) * 100).toFixed(1)) : 0;
     }
 
-    const ranked = agents.map(agent => {
+    const client = getMatchxClient();
+    const ranked = (await Promise.all(agents.map(async agent => {
       const cashBalance = parseFloat(agent.account?.cashBalance.toString() || '100000');
       const totalDeposited = parseFloat(agent.account?.totalDeposited.toString() || '100000');
-      let positionValue = 0;
       let hasShort = false;
-      for (const pos of agent.positions) {
-        const size = parseFloat(pos.size.toString());
-        const price = prices[pos.symbol] || parseFloat(pos.avgCost.toString());
-        positionValue += size * price;
-        if (size < 0) hasShort = true;
+      let totalValue = cashBalance;
+      let deposited = totalDeposited;
+
+      if (agent.matchxAccount) {
+        try {
+          const matchxUserId = Number(agent.matchxAccount.matchxUserId);
+          const [account, positions] = await Promise.all([
+            client.getAccount(matchxUserId),
+            client.getPositions(matchxUserId),
+          ]);
+          totalValue = account.totalEquity || account.walletBalance || cashBalance;
+          deposited = account.initialBalance || totalDeposited;
+          hasShort = positions.some(pos => pos.positionSide === 'SHORT' && Math.abs(pos.size) > 0);
+        } catch {
+          totalValue = cashBalance;
+        }
       }
-      const totalValue = cashBalance + positionValue;
-      const totalPnlPct = ((totalValue - totalDeposited) / totalDeposited) * 100;
+      const totalPnlPct = ((totalValue - deposited) / deposited) * 100;
 
       const agentOrders = ordersByAgent.get(agent.id) || [];
       const winRate = computeWinRate(agentOrders);
@@ -126,13 +133,13 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
           karma: agent.karma,
         },
         totalValue,
-        totalDeposited,
+        totalDeposited: deposited,
         totalPnlPct,
         tradeCount: agent._count.orders,
         winRate,
         hasShort,
       };
-    }).sort((a, b) => b.totalPnlPct - a.totalPnlPct).slice(0, 100);
+    }))).sort((a, b) => b.totalPnlPct - a.totalPnlPct).slice(0, 100);
 
     // Calculate rank changes
     const result = ranked.map((r, i) => {
@@ -161,11 +168,7 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
     }
     previousRanks = newRanks;
 
-    // Only cache when prices are complete (avoid caching degraded data)
-    const pricesComplete = ALL_SYMBOLS.every(s => s in prices);
-    if (pricesComplete) {
-      cachedResult = { data: result, ts: Date.now() };
-    }
+    cachedResult = { data: result, ts: Date.now() };
 
     return reply.send({ data: result.slice(0, take) });
   });

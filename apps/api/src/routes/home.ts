@@ -1,6 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { authenticate, agentOnly } from '../middleware/auth.js';
 import { marketData } from '../services/binanceFeed.js';
+import { getOrCreateMatchxUserId } from '../services/matchxAccount.js';
+import { getMatchxClient } from '../services/matchxClient.js';
+import { syncMatchxAccountState } from '../services/matchxTrading.js';
 
 export default async function homeRoutes(fastify: FastifyInstance) {
   fastify.get('/home', {
@@ -9,14 +12,10 @@ export default async function homeRoutes(fastify: FastifyInstance) {
     const userId = request.authUser!.id;
 
     const [
-      account,
-      positions,
       openOrderCount,
       unreadCount,
       recentPosts,
     ] = await Promise.all([
-      fastify.prisma.account.findUnique({ where: { userId } }),
-      fastify.prisma.position.findMany({ where: { userId } }),
       fastify.prisma.order.count({ where: { userId, status: 'pending' } }),
       fastify.prisma.notification.count({ where: { userId, read: false } }),
       fastify.prisma.post.findMany({
@@ -29,21 +28,13 @@ export default async function homeRoutes(fastify: FastifyInstance) {
 
     const prices = marketData.getPrices();
     const stats = marketData.getStats();
-    const cashBalance = parseFloat(account?.cashBalance.toString() || '100000');
+    const matchxUserId = await getOrCreateMatchxUserId(fastify.prisma, userId);
+    const matchxAccount = await getMatchxClient().getAccount(matchxUserId);
+    syncMatchxAccountState(fastify.prisma, userId, matchxUserId).catch(() => {});
 
-    // Compute portfolio totals (handles both long and short positions)
-    let positionValue = 0;
-    let hasShorts = false;
-    for (const pos of positions) {
-      const size = parseFloat(pos.size.toString());
-      if (size === 0) continue;
-      if (size < 0) hasShorts = true;
-      const price = prices[pos.symbol] || parseFloat(pos.avgCost.toString());
-      positionValue += size * price; // negative for shorts
-    }
-
-    const totalValue = cashBalance + positionValue;
-    const totalDeposited = parseFloat(account?.totalDeposited.toString() || '100000');
+    const cashBalance = matchxAccount.walletBalance || 0;
+    const totalValue = matchxAccount.totalEquity || cashBalance;
+    const totalDeposited = matchxAccount.initialBalance || 100000;
     const totalPnl = totalValue - totalDeposited;
     const totalPnlPct = ((totalValue - totalDeposited) / totalDeposited) * 100;
 
@@ -54,21 +45,28 @@ export default async function homeRoutes(fastify: FastifyInstance) {
         where: { type: 'agent' },
         select: {
           id: true,
+          matchxAccount: { select: { matchxUserId: true } },
           account: { select: { cashBalance: true, totalDeposited: true } },
-          positions: { select: { symbol: true, size: true, avgCost: true } },
         },
       });
 
-      const ranked = agents.map(agent => {
+      const client = getMatchxClient();
+      const ranked = await Promise.all(agents.map(async agent => {
         const cb = parseFloat(agent.account?.cashBalance.toString() || '100000');
         const td = parseFloat(agent.account?.totalDeposited.toString() || '100000');
-        let pv = 0;
-        for (const p of agent.positions) {
-          const price = prices[p.symbol] || parseFloat(p.avgCost.toString());
-          pv += parseFloat(p.size.toString()) * price;
+        if (agent.matchxAccount) {
+          try {
+            const acc = await client.getAccount(Number(agent.matchxAccount.matchxUserId));
+            const tv = acc.totalEquity || acc.walletBalance || cb;
+            const deposited = acc.initialBalance || td;
+            return { id: agent.id, pnlPct: ((tv - deposited) / deposited) * 100 };
+          } catch {
+            return { id: agent.id, pnlPct: ((cb - td) / td) * 100 };
+          }
         }
-        return { id: agent.id, pnlPct: ((cb + pv - td) / td) * 100 };
-      }).sort((a, b) => b.pnlPct - a.pnlPct);
+        return { id: agent.id, pnlPct: ((cb - td) / td) * 100 };
+      }));
+      ranked.sort((a, b) => b.pnlPct - a.pnlPct);
 
       const idx = ranked.findIndex(a => a.id === userId);
       if (idx >= 0) rank = idx + 1;
