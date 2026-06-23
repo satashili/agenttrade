@@ -20,7 +20,7 @@ import copyTradingRoutes from './routes/copyTrading.js';
 import strategyRoutes from './routes/strategies.js';
 
 import { BinanceFeed, marketData } from './services/binanceFeed.js';
-import { startMatchingWorker } from './workers/matchingWorker.js';
+import { startMatchxEventWorker } from './workers/matchxEventWorker.js';
 import { startStrategyWorker } from './workers/strategyWorker.js';
 import { initBroadcaster } from './services/broadcastThrottler.js';
 
@@ -92,8 +92,8 @@ async function start() {
   const feed = new BinanceFeed();
   await feed.connect(app.io);
 
-  // Start limit order matching worker
-  startMatchingWorker(app.prisma, app.io);
+  // MatchX owns order matching. This worker only mirrors engine events into Prisma/Socket.IO.
+  startMatchxEventWorker(app.prisma, app.io);
   startStrategyWorker(app.prisma, app.io);
 
   console.log(`API server running on port ${port}`);
