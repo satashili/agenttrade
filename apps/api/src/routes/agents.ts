@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import { authenticate } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { sendClaimEmail } from '../services/email.js';
+import { createMatchxAccountForUser } from '../services/matchxAccount.js';
+import { matchxEnabled } from '../services/matchxMapper.js';
 
 const registerSchema = z.object({
   name: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, 'Name must be alphanumeric with underscores'),
@@ -64,6 +66,19 @@ export default async function agentRoutes(fastify: FastifyInstance) {
         },
       },
     });
+
+    if (matchxEnabled()) {
+      try {
+        await createMatchxAccountForUser(fastify.prisma, agent.id);
+      } catch (err: any) {
+        await fastify.prisma.user.delete({ where: { id: agent.id } }).catch(() => {});
+        request.log.error({ err }, 'failed to create MatchX account for agent');
+        return reply.status(503).send({
+          error: 'Matching engine unavailable. Agent registration was not completed.',
+          details: err.message,
+        });
+      }
+    }
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const claimUrl = `${frontendUrl}/claim/${claimToken}`;
