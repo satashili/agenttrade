@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
-import { marketData } from '../services/binanceFeed.js';
+import { getOrCreateMatchxUserId } from '../services/matchxAccount.js';
+import { getMatchxClient } from '../services/matchxClient.js';
+import { syncMatchxAccountState } from '../services/matchxTrading.js';
 
 export default async function copyTradingRoutes(fastify: FastifyInstance) {
 
@@ -17,22 +19,12 @@ export default async function copyTradingRoutes(fastify: FastifyInstance) {
     if (!user) return reply.status(404).send({ error: 'User not found' });
     if (user.isLeadTrader) return reply.status(409).send({ error: 'Already a lead trader' });
 
-    // Check PnL > 5%
-    const account = await fastify.prisma.account.findUnique({ where: { userId } });
-    if (!account) return reply.status(404).send({ error: 'Account not found' });
+    const matchxUserId = await getOrCreateMatchxUserId(fastify.prisma, userId);
+    const account = await getMatchxClient().getAccount(matchxUserId);
+    syncMatchxAccountState(fastify.prisma, userId, matchxUserId).catch(() => {});
 
-    const prices = marketData.getPrices();
-    const positions = await fastify.prisma.position.findMany({ where: { userId } });
-    const cashBalance = parseFloat(account.cashBalance.toString());
-    const totalDeposited = parseFloat(account.totalDeposited.toString());
-
-    let positionValue = 0;
-    for (const pos of positions) {
-      const size = parseFloat(pos.size.toString());
-      positionValue += size * (prices[pos.symbol] || 0);
-    }
-
-    const totalValue = cashBalance + positionValue;
+    const totalValue = account.totalEquity || account.walletBalance || 0;
+    const totalDeposited = account.initialBalance || 100000;
     const pnlPct = ((totalValue - totalDeposited) / totalDeposited) * 100;
 
     if (pnlPct < 5) {
@@ -56,15 +48,13 @@ export default async function copyTradingRoutes(fastify: FastifyInstance) {
 
   // GET /api/v1/copy-trading/leaders — List all lead traders with stats
   fastify.get('/copy-trading/leaders', async (_, reply) => {
-    const prices = marketData.getPrices();
-
     const leaders = await fastify.prisma.user.findMany({
       where: { isLeadTrader: true },
       select: {
         id: true, name: true, displayName: true, avatarUrl: true, type: true,
         aiModel: true, karma: true,
+        matchxAccount: { select: { matchxUserId: true } },
         account: { select: { cashBalance: true, totalDeposited: true } },
-        positions: { select: { symbol: true, size: true } },
         _count: {
           select: {
             orders: { where: { status: 'filled' } },
@@ -74,15 +64,22 @@ export default async function copyTradingRoutes(fastify: FastifyInstance) {
       },
     });
 
-    const data = leaders.map(leader => {
+    const client = getMatchxClient();
+    const data = (await Promise.all(leaders.map(async leader => {
       const cashBalance = parseFloat(leader.account?.cashBalance.toString() || '100000');
       const totalDeposited = parseFloat(leader.account?.totalDeposited.toString() || '100000');
-      let positionValue = 0;
-      for (const pos of leader.positions) {
-        positionValue += parseFloat(pos.size.toString()) * (prices[pos.symbol] || 0);
+      let totalValue = cashBalance;
+      let deposited = totalDeposited;
+      if (leader.matchxAccount) {
+        try {
+          const account = await client.getAccount(Number(leader.matchxAccount.matchxUserId));
+          totalValue = account.totalEquity || account.walletBalance || cashBalance;
+          deposited = account.initialBalance || totalDeposited;
+        } catch {
+          totalValue = cashBalance;
+        }
       }
-      const totalValue = cashBalance + positionValue;
-      const pnlPct = ((totalValue - totalDeposited) / totalDeposited) * 100;
+      const pnlPct = ((totalValue - deposited) / deposited) * 100;
 
       return {
         id: leader.id,
@@ -97,7 +94,7 @@ export default async function copyTradingRoutes(fastify: FastifyInstance) {
         tradeCount: leader._count.orders,
         copierCount: leader._count.copyLeading,
       };
-    }).sort((a, b) => b.pnlPct - a.pnlPct);
+    }))).sort((a, b) => b.pnlPct - a.pnlPct);
 
     return reply.send({ data });
   });
