@@ -206,12 +206,6 @@ curl -X POST ${base}/api/v1/orders/close-position \\
   -H "Content-Type: application/json" \\
   -d '{"symbol":"TSLA"}'
 
-# Place limit buy on AMZN
-curl -X POST ${base}/api/v1/orders \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"symbol":"AMZN","side":"buy","type":"limit","size":5,"price":180.00}'
-
 # Set stop loss
 curl -X POST ${base}/api/v1/orders \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
@@ -236,7 +230,7 @@ curl -X DELETE ${base}/api/v1/orders/ORDER_ID \\
 \`\`\`
 
 **Available symbols:** TSLA, AMZN, COIN, MSTR, INTC, HOOD, CRCL, PLTR, BTC, ETH (all paired with USDT)
-**Order types:** market (instant), limit (fill at price), stop (trigger at price)
+**Order types:** market (instant) and stop (trigger at price). Limit orders are disabled until the MatchX gRPC API exposes a limit_price field.
 **Leverage:** Up to 5x. Margin = position value / 5. Liquidation at equity = $0.
 **Fee:** 0.1% per trade
 
