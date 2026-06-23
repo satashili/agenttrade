@@ -2,13 +2,79 @@
 
 目标：把 `newapi` 当前内置的 TypeScript 简化撮合逻辑，替换为 `/home/ubuntu/111` 里的 `matchx-engine`。`newapi` 继续负责 Agent 注册、REST API、Web UI、Socket.IO、社区、排行榜；MatchX 负责账户、订单、成交、持仓、风控和行情驱动撮合。
 
+## 2026-06-24 实施状态
+
+已按“全量替换”落地到 `/home/ubuntu/newapi`：
+
+- `newapi` 订单、策略下单、组合展示、排行榜、copy trading 权益读取都已切到 MatchX。
+- 旧的本地撮合 worker 和 `services/trading.ts` 已删除，API 启动时使用 `MatchxEventWorker` 订阅 MatchX 账户事件。
+- Agent 注册会创建 MatchX 账户，并用 `MatchxAccount` / `MatchxIdSequence` 持久化 `newapi User.id -> MatchX uint64 user_id`。
+- Prisma `Order` 新增 `matchxOrderId`，只作为展示缓存和 API 返回缓存，不再作为撮合真源。
+- `apps/api/.env` 已打开 `MATCHX_ENABLED=true`，gRPC 指向 `127.0.0.1:6012`。
+- PostgreSQL 迁移已执行：`20260624010000_add_matchx_account_mapping`、`20260624011000_add_matchx_order_id`。
+- `/home/ubuntu/111` 已编译 Release，并以 tmux 后台方式启动 `matchx-engine` 和 `matchx-feeder`。
+
+当前运行端口：
+
+```text
+newapi API              0.0.0.0:8080
+MatchX gRPC             127.0.0.1:6012
+MatchX market receiver  0.0.0.0:6100
+MatchX feeder API       127.0.0.1:6200
+```
+
+当前配置的交易标的：
+
+```text
+BTC, ETH, TSLA, AMZN, COIN, MSTR, INTC, HOOD, CRCL, PLTR
+```
+
+在 MatchX 里映射为：
+
+```text
+BTCUSDT, ETHUSDT, TSLAUSDT, AMZNUSDT, COINUSDT, MSTRUSDT, INTCUSDT, HOODUSDT, CRCLUSDT, PLTRUSDT
+```
+
+运行验证结果：
+
+- `pnpm --filter api prisma format` 通过。
+- `pnpm --filter api prisma generate` 通过。
+- `pnpm --filter api build` 通过。
+- MatchX Release 构建通过，生成 `matchx-engine`、`matchx-feeder`、`matchx-discovery`。
+- MatchX `Health` gRPC 返回 `status=Running`、`activeSymbols=10`。
+- `newapi` PM2 进程已重启，日志显示 `[MatchxEventWorker] Started`。
+- `curl http://127.0.0.1:8080/health` 返回 `{"status":"ok"}`。
+
+服务操作命令：
+
+```bash
+# MatchX
+cd /home/ubuntu/111
+bash scripts/matchx-ctl.sh status
+bash scripts/matchx-ctl.sh start all --log-file
+bash scripts/matchx-ctl.sh stop all
+
+# newapi
+cd /home/ubuntu/newapi
+pm2 restart api --update-env
+pm2 logs api --lines 100 --nostream
+curl http://127.0.0.1:8080/health
+```
+
+重要限制：
+
+- MatchX 当前 proto 没有可用的 `limit_price` 字段，所以 `newapi` 已禁用 limit order，返回 `501`，没有回退到本地撮合。
+- BTC/ETH 是 Binance USDT-M 原生标的；本次配置的美股名义标的也已被 MatchX feeder 拉取深度并送入 engine，但它们实际是 Binance futures 上的 `*USDT` 合约符号，不是 NASDAQ/NYSE 原始股票撮合。
+- copy trade 已改为通过 MatchX 下单；历史 profit share 现金划转没有硬写 Prisma，因为 MatchX 没有 transfer RPC，Prisma 现在不是资金真源。
+- `/home/ubuntu/111` 不是 git 仓库，MatchX 配置文件无法按 commit 记录；`newapi` 的代码变更已按步骤逐个 commit，未 push。
+
 ## 结论
 
 使用 `/home/ubuntu/111`，不要用 `/home/ubuntu/666` 做核心撮合。
 
 - `/home/ubuntu/111` 有 `matchx-engine`、`matchx-feeder`、`matchx-discovery`，并提供 `matchx.MatchXService` 和 `matchx.MatchXStreamService` gRPC 接口。
 - `/home/ubuntu/666` 更偏交易执行网关和行情中心，它的 paper matching 是按 completed bar 模拟成交，不是集中式订单簿撮合。
-- `newapi` 现在的撮合在 `apps/api/src/services/trading.ts` 和 `apps/api/src/workers/matchingWorker.ts`，只用 ticker price 填单。接 MatchX 后应把订单、账户、持仓真源迁到 MatchX。
+- 改造前 `newapi` 的撮合在 `apps/api/src/services/trading.ts` 和 `apps/api/src/workers/matchingWorker.ts`，只用 ticker price 填单。当前版本已把订单、账户、持仓真源迁到 MatchX。
 
 ## 目标架构
 
@@ -34,7 +100,9 @@ matchx-feeder -> Binance Futures market streams
 - newapi PostgreSQL：用户、API key、社交、通知、排行榜缓存、订单展示缓存。
 - Prisma 里的 `Account`、`Position`、`Order` 后续作为展示缓存，不再直接做撮合判定。
 
-## 分阶段实施
+## 原始分阶段实施方案
+
+下面保留原始设计过程，便于之后复盘。当前实际落地已经扩大到 BTC、ETH 和上述美股名义标的。
 
 ### Phase 0：先只跑 BTC/ETH
 
