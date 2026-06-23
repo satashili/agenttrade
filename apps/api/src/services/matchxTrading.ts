@@ -22,6 +22,7 @@ export interface ExecuteMatchxOrderInput {
   size: number;
   price?: number;
   strategyId?: string | null;
+  skipCopy?: boolean;
   io: SocketServer;
 }
 
@@ -67,6 +68,9 @@ export async function executeMatchxOrder(
 
     await syncMatchxAccountState(prisma, input.userId, matchxUserId).catch(() => {});
     publishTradeSideEffects(prisma, input.io, input, localOrder, result.trades).catch(() => {});
+    replicateMatchxToCopiers(prisma, input.io, input, result.trades).catch((err) => {
+      console.error(`[CopyTrade] MatchX replication failed for ${input.agentName}:`, err.message);
+    });
 
     return {
       success: true,
@@ -79,6 +83,81 @@ export async function executeMatchxOrder(
     };
   } catch (err: any) {
     return { success: false, error: err.message };
+  }
+}
+
+async function replicateMatchxToCopiers(
+  prisma: PrismaClient,
+  io: SocketServer,
+  leaderInput: ExecuteMatchxOrderInput,
+  trades: MatchxTradeInfo[]
+) {
+  if (leaderInput.strategyId || leaderInput.skipCopy) return;
+
+  const fill = summarizeTrades(trades);
+  if (fill.quantity <= 0 || fill.avgPrice <= 0) return;
+
+  const leader = await prisma.user.findUnique({
+    where: { id: leaderInput.userId },
+    select: { isLeadTrader: true },
+  });
+  if (!leader?.isLeadTrader) return;
+
+  const copiers = await prisma.copyFollow.findMany({
+    where: { leaderId: leaderInput.userId, active: true },
+    select: {
+      follower: {
+        select: { id: true, name: true },
+      },
+    },
+  });
+  if (copiers.length === 0) return;
+
+  const client = getMatchxClient();
+  const leaderMatchxUserId = await getOrCreateMatchxUserId(prisma, leaderInput.userId);
+  const leaderAccount = await client.getAccount(leaderMatchxUserId);
+  const leaderEquity = accountEquity(leaderAccount);
+  if (leaderEquity <= 0) return;
+
+  const leaderTradeValue = fill.quantity * fill.avgPrice;
+  const leaderProportion = leaderTradeValue / leaderEquity;
+  if (leaderProportion <= 0) return;
+
+  for (const copier of copiers) {
+    try {
+      const copierMatchxUserId = await getOrCreateMatchxUserId(prisma, copier.follower.id);
+      const copierAccount = await client.getAccount(copierMatchxUserId);
+      const copierEquity = accountEquity(copierAccount);
+      if (copierEquity <= 0) continue;
+
+      const copierSize = roundCopySize(leaderInput.symbol, (copierEquity * leaderProportion) / fill.avgPrice);
+      if (copierSize <= 0) continue;
+
+      const result = await executeMatchxOrder(prisma, {
+        userId: copier.follower.id,
+        agentName: copier.follower.name,
+        symbol: leaderInput.symbol,
+        side: leaderInput.side,
+        type: 'market',
+        size: copierSize,
+        io,
+        skipCopy: true,
+      });
+
+      if (result.success) {
+        await prisma.notification.create({
+          data: {
+            userId: copier.follower.id,
+            type: 'copy_trade',
+            message: `Copy trade: ${leaderInput.side.toUpperCase()} ${copierSize} ${leaderInput.symbol} @ $${fill.avgPrice} (following ${leaderInput.agentName})`,
+          },
+        }).catch(() => {});
+      } else {
+        console.error(`[CopyTrade] MatchX copy order failed for ${copier.follower.name}:`, result.error);
+      }
+    } catch (err) {
+      console.error(`[CopyTrade] Failed for copier ${copier.follower.name}:`, (err as Error).message);
+    }
   }
 }
 
@@ -262,6 +341,17 @@ function signedSizeForSymbol(positions: MatchxPositionInfo[], matchxSymbol: stri
     size += pos.positionSide === 'SHORT' ? -Math.abs(pos.size) : Math.abs(pos.size);
   }
   return size;
+}
+
+function accountEquity(account: { totalEquity?: number; walletBalance?: number; initialBalance?: number }): number {
+  return account.totalEquity || account.walletBalance || account.initialBalance || 0;
+}
+
+function roundCopySize(symbol: string, size: number): number {
+  if (!Number.isFinite(size) || size <= 0) return 0;
+  if (symbol === 'BTC') return parseFloat(size.toFixed(5));
+  if (symbol === 'ETH') return parseFloat(size.toFixed(4));
+  return parseFloat(size.toFixed(2));
 }
 
 function summarizeTrades(trades: MatchxTradeInfo[]) {
