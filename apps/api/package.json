@@ -11,11 +11,12 @@
     "@agenttrade/types": "workspace:*",
     "@fastify/cors": "^11.2.0",
     "@fastify/jwt": "^10.0.0",
+    "@grpc/grpc-js": "^1.14.4",
+    "@grpc/proto-loader": "^0.8.1",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "fastify": "^5.1.0",
     "fastify-plugin": "^5.0.1",
-
     "pino-pretty": "^13.0.0",
     "resend": "^4.0.1",
     "socket.io": "^4.8.1",
