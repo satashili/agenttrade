@@ -1,7 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
-import { marketData } from '../services/binanceFeed.js';
-import { MAX_LEVERAGE } from '../services/trading.js';
+import { getOrCreateMatchxUserId } from '../services/matchxAccount.js';
+import { getMatchxClient } from '../services/matchxClient.js';
+import { defaultMatchxLeverage, fromMatchxSymbol } from '../services/matchxMapper.js';
+import { syncMatchxAccountState } from '../services/matchxTrading.js';
 
 export default async function portfolioRoutes(fastify: FastifyInstance) {
   // GET /api/v1/portfolio — Full portfolio with live PnL
@@ -10,65 +12,59 @@ export default async function portfolioRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     const userId = request.authUser!.id;
 
+    let matchxUserId: number;
+    try {
+      matchxUserId = await getOrCreateMatchxUserId(fastify.prisma, userId);
+    } catch (err: any) {
+      return reply.status(503).send({ error: 'Matching engine unavailable', details: err.message });
+    }
+
+    const client = getMatchxClient();
     const [account, positions] = await Promise.all([
-      fastify.prisma.account.findUnique({ where: { userId } }),
-      fastify.prisma.position.findMany({ where: { userId } }),
+      client.getAccount(matchxUserId),
+      client.getPositions(matchxUserId),
     ]);
 
-    if (!account) return reply.status(404).send({ error: 'Account not found' });
+    syncMatchxAccountState(fastify.prisma, userId, matchxUserId).catch(() => {});
 
-    const prices = marketData.getPrices();
-    const cashBalance = parseFloat(account.cashBalance.toString());
-
-    let positionValue = 0;
-    let totalUnrealizedPnl = 0;
-    let totalRealizedPnl = 0;
-    let totalMarginUsed = 0;
+    const cashBalance = account.walletBalance || 0;
+    const totalValue = account.totalEquity || cashBalance;
+    const totalDeposited = account.initialBalance || 100000;
+    const totalPnl = totalValue - totalDeposited;
+    const totalPnlPct = ((totalValue - totalDeposited) / totalDeposited) * 100;
+    const totalUnrealizedPnl = account.unrealizedPnl || 0;
+    const totalRealizedPnl = 0;
+    const totalMarginUsed = account.totalInitialMargin || 0;
+    const availableMargin = account.availableBalance || Math.max(0, totalValue - totalMarginUsed);
 
     const positionsOut: Record<string, any> = {};
+    let positionValue = 0;
 
     for (const pos of positions) {
-      const size = parseFloat(pos.size.toString());
-      if (size === 0) continue; // Filter out zero positions
+      const signedSize = pos.positionSide === 'SHORT' ? -Math.abs(pos.size) : Math.abs(pos.size);
+      if (signedSize === 0) continue;
 
-      const avgCost = parseFloat(pos.avgCost.toString());
-      const realizedPnl = parseFloat(pos.realizedPnl.toString());
-      const currentPrice = prices[pos.symbol] || avgCost;
-
-      // For longs: value is positive; for shorts: value is negative
-      const value = size * currentPrice;
-      const unrealizedPnl = size > 0
-        ? size * (currentPrice - avgCost)        // Long: profit when price goes up
-        : Math.abs(size) * (avgCost - currentPrice); // Short: profit when price goes down
-      const costBasis = Math.abs(size) * avgCost;
-      const unrealizedPnlPct = costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0;
-
-      const marginUsed = (Math.abs(size) * currentPrice) / MAX_LEVERAGE;
-      totalMarginUsed += marginUsed;
-
+      const symbol = fromMatchxSymbol(pos.symbol);
+      const currentPrice = pos.markPrice || pos.avgPrice || pos.entryPrice || 0;
+      const avgCost = pos.entryPrice || pos.avgPrice || currentPrice;
+      const value = signedSize * currentPrice;
+      const marginUsed = pos.margin || (Math.abs(signedSize) * currentPrice) / defaultMatchxLeverage();
       positionValue += value;
-      totalUnrealizedPnl += unrealizedPnl;
-      totalRealizedPnl += realizedPnl;
 
-      positionsOut[pos.symbol] = {
-        symbol: pos.symbol,
-        side: size > 0 ? 'long' : 'short',
-        size,
+      positionsOut[symbol] = {
+        symbol,
+        side: signedSize > 0 ? 'long' : 'short',
+        size: signedSize,
         avgCost,
         currentPrice,
         value,
-        unrealizedPnl,
-        unrealizedPnlPct,
-        realizedPnl,
+        unrealizedPnl: pos.unrealizedPnl || 0,
+        unrealizedPnlPct: pos.unrealizedPnlPercent || 0,
+        realizedPnl: 0,
         marginUsed,
+        liquidationPrice: pos.liquidationPrice,
       };
     }
-
-    const totalValue = cashBalance + positionValue;
-    const totalDeposited = parseFloat(account.totalDeposited.toString());
-    const totalPnl = totalValue - totalDeposited;
-    const totalPnlPct = ((totalValue - totalDeposited) / totalDeposited) * 100;
-    const availableMargin = Math.max(0, totalValue - totalMarginUsed);
 
     // Add allocation percentages
     for (const key of Object.keys(positionsOut)) {
@@ -87,11 +83,11 @@ export default async function portfolioRoutes(fastify: FastifyInstance) {
       totalUnrealizedPnl,
       totalRealizedPnl,
       leverage: {
-        maxLeverage: MAX_LEVERAGE,
+        maxLeverage: defaultMatchxLeverage(),
         totalMarginUsed,
         availableMargin,
         currentLeverage: totalValue > 0
-          ? parseFloat(((totalMarginUsed * MAX_LEVERAGE) / totalValue).toFixed(2))
+          ? parseFloat(((totalMarginUsed * defaultMatchxLeverage()) / totalValue).toFixed(2))
           : 0,
       },
       positions: positionsOut,

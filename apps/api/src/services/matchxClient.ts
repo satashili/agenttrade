@@ -35,6 +35,7 @@ export interface MatchxPositionInfo {
   margin: number;
   unrealizedPnl: number;
   unrealizedPnlPercent: number;
+  liquidationPrice: number;
 }
 
 export interface MatchxOrderInfo {
