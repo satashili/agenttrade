@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { authenticate } from '../middleware/auth.js';
-import { marketData } from '../services/binanceFeed.js';
+import { getMatchxClient } from '../services/matchxClient.js';
+import { fromMatchxSymbol } from '../services/matchxMapper.js';
 
 export default async function userRoutes(fastify: FastifyInstance) {
   // GET /api/v1/users/:name — Public profile
@@ -29,39 +30,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
     // Attach portfolio if agent
     let portfolio = null;
     if (user.type === 'agent') {
-      const pricesRaw = marketData.getPrices();
-      const account = await fastify.prisma.account.findUnique({ where: { userId: user.id } });
-      const positions = await fastify.prisma.position.findMany({ where: { userId: user.id } });
-
-      if (account) {
-        const cashBalance = parseFloat(account.cashBalance.toString());
-        const totalDeposited = parseFloat(account.totalDeposited.toString());
-        let positionValue = 0;
-
-        const posOut: Record<string, any> = {};
-        for (const pos of positions) {
-          const size = parseFloat(pos.size.toString());
-          if (size === 0) continue;
-          const price = pricesRaw[pos.symbol] || 0;
-          const value = size * price;
-          positionValue += value;
-          posOut[pos.symbol] = {
-            size,
-            avgCost: parseFloat(pos.avgCost.toString()),
-            currentPrice: price,
-            value,
-            unrealizedPnl: value - size * parseFloat(pos.avgCost.toString()),
-          };
-        }
-
-        const totalValue = cashBalance + positionValue;
-        portfolio = {
-          cashBalance,
-          totalValue,
-          totalPnlPct: ((totalValue - totalDeposited) / totalDeposited) * 100,
-          positions: posOut,
-        };
-      }
+      portfolio = await buildMatchxPortfolio(fastify, user.id);
     }
 
     return reply.send({ user, portfolio });
@@ -125,8 +94,6 @@ export default async function userRoutes(fastify: FastifyInstance) {
     const { a, b } = request.query as { a?: string; b?: string };
     if (!a || !b) return reply.status(400).send({ error: 'Both query params a and b are required' });
 
-    const pricesRaw = marketData.getPrices();
-
     async function getAgentData(name: string) {
       const user = await fastify.prisma.user.findUnique({
         where: { name: name.toLowerCase() },
@@ -137,30 +104,9 @@ export default async function userRoutes(fastify: FastifyInstance) {
       });
       if (!user) return null;
 
-      const account = await fastify.prisma.account.findUnique({ where: { userId: user.id } });
-      const positions = await fastify.prisma.position.findMany({ where: { userId: user.id } });
-
-      let positionValue = 0;
-      const posOut: Record<string, any> = {};
-      for (const pos of positions) {
-        const size = parseFloat(pos.size.toString());
-        if (size === 0) continue;
-        const price = pricesRaw[pos.symbol] || 0;
-        const value = size * price;
-        positionValue += value;
-        posOut[pos.symbol] = {
-          size,
-          avgCost: parseFloat(pos.avgCost.toString()),
-          currentPrice: price,
-          value,
-          unrealizedPnl: value - size * parseFloat(pos.avgCost.toString()),
-        };
-      }
-
-      const cashBalance = account ? parseFloat(account.cashBalance.toString()) : 0;
-      const totalDeposited = account ? parseFloat(account.totalDeposited.toString()) : 0;
-      const totalValue = cashBalance + positionValue;
-      const totalPnlPct = totalDeposited > 0 ? ((totalValue - totalDeposited) / totalDeposited) * 100 : 0;
+      const portfolio = await buildMatchxPortfolio(fastify, user.id);
+      const totalValue = portfolio?.totalValue || 0;
+      const totalPnlPct = portfolio?.totalPnlPct || 0;
 
       // Win rate: orders where sell price > avgCost at time (approximate with profitable sells)
       const wins = await fastify.prisma.order.count({
@@ -179,7 +125,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
         pnlPct: parseFloat(totalPnlPct.toFixed(2)),
         tradeCount: totalFilled,
         winRate,
-        positions: posOut,
+        positions: portfolio?.positions || {},
       };
     }
 
@@ -328,4 +274,40 @@ export default async function userRoutes(fastify: FastifyInstance) {
 
     return reply.send({ message: `Unfollowed ${target.name}` });
   });
+}
+
+async function buildMatchxPortfolio(fastify: FastifyInstance, userId: string) {
+  const mapping = await fastify.prisma.matchxAccount.findUnique({ where: { userId } });
+  if (!mapping) return null;
+
+  const client = getMatchxClient();
+  const [account, positions] = await Promise.all([
+    client.getAccount(Number(mapping.matchxUserId)),
+    client.getPositions(Number(mapping.matchxUserId)),
+  ]);
+
+  const posOut: Record<string, any> = {};
+  for (const pos of positions) {
+    const size = pos.positionSide === 'SHORT' ? -Math.abs(pos.size) : Math.abs(pos.size);
+    if (size === 0) continue;
+    const symbol = fromMatchxSymbol(pos.symbol);
+    const currentPrice = pos.markPrice || pos.avgPrice || pos.entryPrice || 0;
+    posOut[symbol] = {
+      size,
+      avgCost: pos.entryPrice || pos.avgPrice || currentPrice,
+      currentPrice,
+      value: size * currentPrice,
+      unrealizedPnl: pos.unrealizedPnl || 0,
+    };
+  }
+
+  const cashBalance = account.walletBalance || 0;
+  const totalValue = account.totalEquity || cashBalance;
+  const totalDeposited = account.initialBalance || 100000;
+  return {
+    cashBalance,
+    totalValue,
+    totalPnlPct: ((totalValue - totalDeposited) / totalDeposited) * 100,
+    positions: posOut,
+  };
 }
