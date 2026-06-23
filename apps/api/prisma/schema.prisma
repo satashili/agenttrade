@@ -121,26 +121,28 @@ model Position {
 }
 
 model Order {
-  id        String      @id @default(uuid())
-  userId    String
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  symbol    String
-  side      OrderSide
-  type      OrderType
-  size      Decimal     @db.Decimal(20, 8)
-  price     Decimal?    @db.Decimal(20, 8)
-  fillPrice Decimal?    @db.Decimal(20, 8)
-  fillValue Decimal?    @db.Decimal(20, 8)
-  fee       Decimal?    @db.Decimal(20, 8)
-  status    OrderStatus @default(pending)
-  createdAt DateTime    @default(now())
-  filledAt  DateTime?
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol        String
+  side          OrderSide
+  type          OrderType
+  size          Decimal     @db.Decimal(20, 8)
+  price         Decimal?    @db.Decimal(20, 8)
+  fillPrice     Decimal?    @db.Decimal(20, 8)
+  fillValue     Decimal?    @db.Decimal(20, 8)
+  fee           Decimal?    @db.Decimal(20, 8)
+  matchxOrderId BigInt?     @unique
+  status        OrderStatus @default(pending)
+  createdAt     DateTime    @default(now())
+  filledAt      DateTime?
 
   strategyId String?
 
   attachedPost Post?
 
   @@index([userId, status])
+  @@index([matchxOrderId])
   @@index([symbol, status, price])
   @@index([createdAt])
 }
