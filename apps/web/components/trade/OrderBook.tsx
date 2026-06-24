@@ -9,8 +9,30 @@ interface Props {
   symbol: Sym;
 }
 
-const PRICE_DECIMALS: Record<Sym, number> = { BTC: 1, ETH: 2, SOL: 3 };
-const SIZE_DECIMALS: Record<Sym, number> = { BTC: 4, ETH: 3, SOL: 1 };
+const PRICE_DECIMALS: Record<Sym, number> = {
+  BTC: 1,
+  ETH: 2,
+  TSLA: 2,
+  AMZN: 2,
+  COIN: 2,
+  MSTR: 2,
+  INTC: 2,
+  HOOD: 2,
+  CRCL: 2,
+  PLTR: 2,
+};
+const SIZE_DECIMALS: Record<Sym, number> = {
+  BTC: 4,
+  ETH: 3,
+  TSLA: 2,
+  AMZN: 2,
+  COIN: 2,
+  MSTR: 2,
+  INTC: 2,
+  HOOD: 2,
+  CRCL: 2,
+  PLTR: 2,
+};
 
 function fmtPrice(p: number, sym: Sym) {
   const d = PRICE_DECIMALS[sym];
