@@ -21,7 +21,7 @@ const NAMES: Record<Sym, string> = {
 };
 
 interface Props { selectedSymbol: Sym; onSelect: (sym: Sym) => void; width?: number; }
-interface Stats { [sym: string]: { changePct24h: number }; }
+interface Stats { [sym: string]: { price?: number; changePct24h: number }; }
 
 const WIDE_THRESHOLD = 90;
 
@@ -60,7 +60,7 @@ export function SymbolSidebar({ selectedSymbol, onSelect, width = 120 }: Props) 
 function SymButton({ sym, prices, stats, selected, onSelect, wide }: {
   sym: Sym; prices: Record<string, number | undefined>; stats: Stats; selected: Sym; onSelect: (s: Sym) => void; wide: boolean;
 }) {
-  const price = prices[sym];
+  const price = prices[sym] ?? stats[sym]?.price;
   const pct = stats[sym]?.changePct24h ?? 0;
   const isUp = pct >= 0;
   const sel = sym === selected;

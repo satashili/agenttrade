@@ -12,7 +12,7 @@ export function Navbar() {
   const { prices } = useMarketStore();
   const { user, logout } = useAuthStore();
   const pathname = usePathname();
-  const [stats, setStats] = useState<Record<string, { changePct24h: number }>>({});
+  const [stats, setStats] = useState<Record<string, { price?: number; changePct24h: number }>>({});
 
   useEffect(() => {
     const fetchStats = () => {
@@ -80,7 +80,7 @@ export function Navbar() {
         {/* Price Ticker — fixed-width cells to prevent layout shift */}
         <div className="hidden md:flex items-center gap-4 text-[11px]" style={{ fontFamily: "'DM Mono', monospace" }}>
           {SYMBOLS.map((sym) => {
-            const price = prices[sym];
+            const price = prices[sym] ?? stats[sym]?.price;
             const pct = stats[sym]?.changePct24h ?? 0;
             const isUp = pct >= 0;
             const d = DECIMALS[sym];

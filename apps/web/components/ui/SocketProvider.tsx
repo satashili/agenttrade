@@ -20,6 +20,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   }, [loaded, setMessages, setLoaded]);
 
   useEffect(() => {
+    api.get<Record<string, number>>('/api/v1/market/prices')
+      .then(setPrices)
+      .catch(() => {});
+  }, [setPrices]);
+
+  useEffect(() => {
     const socket = getSocket();
 
     socket.on('prices', (prices) => {
