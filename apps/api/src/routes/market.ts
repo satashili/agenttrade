@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { marketData } from '../services/binanceFeed.js';
+import { marketData, type MarketStats } from '../services/binanceFeed.js';
 import { ALL_SYMBOLS, SPOT_SYMBOLS, EQUITY_SYMBOLS } from '@agenttrade/types';
 
 // Binance pair mapping
@@ -21,9 +21,51 @@ function getRestBase(sym: string): string {
     : 'https://api.binance.com/api/v3';
 }
 
+async function fetchTickerStats(sym: string): Promise<MarketStats | null> {
+  const pair = BINANCE_PAIRS[sym];
+  if (!pair) return null;
+
+  const base = getRestBase(sym);
+  const res = await fetch(`${base}/ticker/24hr?symbol=${pair}`);
+  if (!res.ok) return null;
+
+  const d = await res.json() as any;
+  const price = parseFloat(d.lastPrice);
+  if (!Number.isFinite(price)) return null;
+
+  return {
+    price,
+    open24h: parseFloat(d.openPrice) || price,
+    high24h: parseFloat(d.highPrice) || price,
+    low24h: parseFloat(d.lowPrice) || price,
+    change24h: parseFloat(d.priceChange) || 0,
+    changePct24h: parseFloat(d.priceChangePercent) || 0,
+    volume24h: parseFloat(d.quoteVolume) || 0,
+  };
+}
+
+async function getCompleteMarketStats(): Promise<Record<string, MarketStats>> {
+  const stats = marketData.getStats();
+  const missing = ALL_SYMBOLS.filter(sym => !stats[sym]);
+
+  if (missing.length === 0) return stats;
+
+  const fetched = await Promise.all(missing.map(async sym => [sym, await fetchTickerStats(sym)] as const));
+  for (const [sym, stat] of fetched) {
+    if (stat) {
+      stats[sym] = stat;
+      marketData.stats[sym] = stat;
+      marketData.prices[sym] = stat.price;
+    }
+  }
+
+  return stats;
+}
+
 export default async function marketRoutes(fastify: FastifyInstance) {
   // GET /api/v1/market/prices — Current prices
   fastify.get('/market/prices', async (_, reply) => {
+    await getCompleteMarketStats();
     const prices = marketData.getPrices();
     if (Object.keys(prices).length === 0) {
       return reply.status(503).send({ error: 'Price data not available yet. Binance feed may be connecting.' });
@@ -33,7 +75,7 @@ export default async function marketRoutes(fastify: FastifyInstance) {
 
   // GET /api/v1/market/stats — 24h stats for each symbol
   fastify.get('/market/stats', async (_, reply) => {
-    const allStats = marketData.getStats();
+    const allStats = await getCompleteMarketStats();
     const out: Record<string, any> = {};
 
     for (const [symbol, s] of Object.entries(allStats)) {
@@ -127,6 +169,42 @@ export default async function marketRoutes(fastify: FastifyInstance) {
         bids: data.bids.map((b: string[]) => ({ price: parseFloat(b[0]), qty: parseFloat(b[1]) })),
         asks: data.asks.map((a: string[]) => ({ price: parseFloat(a[0]), qty: parseFloat(a[1]) })),
         lastUpdateId: data.lastUpdateId,
+      });
+    } catch (err: any) {
+      return reply.status(502).send({ error: 'Binance API request failed', details: err.message });
+    }
+  });
+
+  // GET /api/v1/market/agg-trades — Recent exchange trades proxied from Binance
+  fastify.get('/market/agg-trades', async (request, reply) => {
+    const { symbol = 'BTC', limit = '30' } = request.query as {
+      symbol?: string; limit?: string;
+    };
+
+    const sym = symbol.toUpperCase();
+    const pair = BINANCE_PAIRS[sym];
+    if (!pair) {
+      return reply.status(400).send({ error: `Invalid symbol. Allowed: ${ALLOWED_SYMBOLS_STR}` });
+    }
+
+    const take = Math.min(Math.max(parseInt(limit) || 30, 1), 100);
+
+    try {
+      const base = getRestBase(sym);
+      const res = await fetch(`${base}/trades?symbol=${pair}&limit=${take}`);
+      if (!res.ok) {
+        return reply.status(502).send({ error: 'Failed to fetch trades from Binance' });
+      }
+
+      const data = await res.json() as any[];
+      return reply.send({
+        symbol: sym,
+        data: data.map(d => ({
+          price: parseFloat(d.price),
+          qty: parseFloat(d.qty),
+          isBuyerMaker: Boolean(d.isBuyerMaker),
+          time: Number(d.time),
+        })),
       });
     } catch (err: any) {
       return reply.status(502).send({ error: 'Binance API request failed', details: err.message });
