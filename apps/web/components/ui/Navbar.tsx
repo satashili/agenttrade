@@ -16,8 +16,7 @@ export function Navbar() {
 
   useEffect(() => {
     const fetchStats = () => {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-      fetch(`${apiBase}/api/v1/market/stats`)
+      fetch('/api/v1/market/stats')
         .then(r => r.ok ? r.json() : {})
         .then(setStats)
         .catch(() => {});

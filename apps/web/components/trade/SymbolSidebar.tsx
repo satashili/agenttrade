@@ -31,8 +31,7 @@ export function SymbolSidebar({ selectedSymbol, onSelect, width = 120 }: Props) 
   const wide = width >= WIDE_THRESHOLD;
 
   useEffect(() => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-    const f = () => fetch(`${apiBase}/api/v1/market/stats`).then(r => r.ok ? r.json() : {}).then(setStats).catch(() => {});
+    const f = () => fetch('/api/v1/market/stats').then(r => r.ok ? r.json() : {}).then(setStats).catch(() => {});
     f();
     const i = setInterval(f, 30_000);
     return () => clearInterval(i);

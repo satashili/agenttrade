@@ -2,10 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-const SPOT_REST = 'https://data-api.binance.vision/api/v3';
-const FUTURES_REST = 'https://fapi.binance.com/fapi/v1';
 const SPOT_WS = 'wss://data-stream.binance.vision/stream?streams=';
 const FUTURES_WS = 'wss://fstream.binance.com/stream?streams=';
+const API_BASE = '/api/v1';
 
 const SPOT_PAIRS: Record<string, string> = {
   BTC: 'BTCUSDT',
@@ -29,14 +28,6 @@ function isEquity(symbol: string): boolean {
 
 function getPair(symbol: string): string {
   return SPOT_PAIRS[symbol] || EQUITY_PAIRS[symbol] || `${symbol}USDT`;
-}
-
-function getRestBase(symbol: string): string {
-  return isEquity(symbol) ? FUTURES_REST : SPOT_REST;
-}
-
-function getWsBase(symbol: string): string {
-  return isEquity(symbol) ? FUTURES_WS : SPOT_WS;
 }
 
 export interface KlineData {
@@ -200,20 +191,20 @@ export function useBinanceKline(symbol: string, timeframe: TimeframeKey = '1m') 
   const wsActiveRef = useRef(false);
   const pair = getPair(symbol);
   const pairLc = pair.toLowerCase();
-  const restBase = getRestBase(symbol);
 
   const fetchKlines = useCallback(async () => {
     try {
-      const res = await fetch(`${restBase}/klines?symbol=${pair}&interval=${timeframe}&limit=300`);
+      const res = await fetch(`${API_BASE}/market/klines?symbol=${encodeURIComponent(symbol)}&interval=${timeframe}&limit=300`);
       const data = await res.json();
-      if (Array.isArray(data)) {
-        const parsed: KlineData[] = data.map((d: any) => ({
-          time: d[0] / 1000,
-          open: parseFloat(d[1]),
-          high: parseFloat(d[2]),
-          low: parseFloat(d[3]),
-          close: parseFloat(d[4]),
-          volume: parseFloat(d[5]),
+      const candles = Array.isArray(data?.candles) ? data.candles : [];
+      if (candles.length > 0) {
+        const parsed: KlineData[] = candles.map((d: any) => ({
+          time: Math.floor(Number(d.time) / 1000),
+          open: Number(d.open),
+          high: Number(d.high),
+          low: Number(d.low),
+          close: Number(d.close),
+          volume: Number(d.volume),
         }));
         setKlines(parsed);
         setLoading(false);
@@ -221,7 +212,7 @@ export function useBinanceKline(symbol: string, timeframe: TimeframeKey = '1m') 
     } catch {
       setLoading(false);
     }
-  }, [pair, timeframe, restBase]);
+  }, [symbol, timeframe]);
 
   useEffect(() => {
     setLoading(true);
@@ -284,34 +275,35 @@ export function useBinanceDepth(symbol: string) {
   const wsActiveRef = useRef(false);
   const pair = getPair(symbol);
   const pairLc = pair.toLowerCase();
-  const restBase = getRestBase(symbol);
 
-  const parseDepth = useCallback((bids: string[][], asks: string[][]) => {
+  const parseDepth = useCallback((bids: Array<string[] | { price: number; qty?: number; quantity?: number }>, asks: Array<string[] | { price: number; qty?: number; quantity?: number }>) => {
     let bidTotal = 0;
     let askTotal = 0;
     setOrderBook({
       bids: bids.slice(0, 15).map((b) => {
-        const qty = parseFloat(b[1]);
+        const price = Array.isArray(b) ? parseFloat(b[0]) : Number(b.price);
+        const qty = Array.isArray(b) ? parseFloat(b[1]) : Number(b.qty ?? b.quantity ?? 0);
         bidTotal += qty;
-        return { price: parseFloat(b[0]), quantity: qty, total: bidTotal };
+        return { price, quantity: qty, total: bidTotal };
       }),
       asks: asks.slice(0, 15).map((a) => {
-        const qty = parseFloat(a[1]);
+        const price = Array.isArray(a) ? parseFloat(a[0]) : Number(a.price);
+        const qty = Array.isArray(a) ? parseFloat(a[1]) : Number(a.qty ?? a.quantity ?? 0);
         askTotal += qty;
-        return { price: parseFloat(a[0]), quantity: qty, total: askTotal };
+        return { price, quantity: qty, total: askTotal };
       }),
     });
   }, []);
 
   const fetchDepth = useCallback(async () => {
     try {
-      const res = await fetch(`${restBase}/depth?symbol=${pair}&limit=20`);
+      const res = await fetch(`${API_BASE}/market/depth?symbol=${encodeURIComponent(symbol)}&limit=20`);
       const d = await res.json();
       if (d.bids && d.asks) {
         parseDepth(d.bids, d.asks);
       }
     } catch { /* silent */ }
-  }, [pair, parseDepth, restBase]);
+  }, [parseDepth, symbol]);
 
   useEffect(() => {
     fetchDepth();
@@ -352,22 +344,22 @@ export function useBinanceAggTrades(symbol: string) {
   const wsActiveRef = useRef(false);
   const pair = getPair(symbol);
   const pairLc = pair.toLowerCase();
-  const restBase = getRestBase(symbol);
 
   const fetchTrades = useCallback(async () => {
     try {
-      const res = await fetch(`${restBase}/trades?symbol=${pair}&limit=30`);
-      const data = await res.json();
+      const res = await fetch(`${API_BASE}/market/agg-trades?symbol=${encodeURIComponent(symbol)}&limit=30`);
+      const response = await res.json();
+      const data = Array.isArray(response?.data) ? response.data : [];
       if (Array.isArray(data)) {
         setTrades(data.map((d: any) => ({
-          price: parseFloat(d.price),
-          qty: parseFloat(d.qty),
-          isBuyerMaker: d.isBuyerMaker,
-          time: d.time,
+          price: Number(d.price),
+          qty: Number(d.qty),
+          isBuyerMaker: Boolean(d.isBuyerMaker),
+          time: Number(d.time),
         })).reverse());
       }
     } catch { /* silent */ }
-  }, [pair, restBase]);
+  }, [symbol]);
 
   useEffect(() => {
     fetchTrades();
@@ -429,7 +421,6 @@ export function useBinanceTicker(symbol: string) {
   const lastPriceRef = useRef<number>(0);
   const pair = getPair(symbol);
   const pairLc = pair.toLowerCase();
-  const restBase = getRestBase(symbol);
 
   const parseTicker = useCallback((d: any): TickerData => {
     return {
@@ -454,13 +445,22 @@ export function useBinanceTicker(symbol: string) {
 
   const fetchTicker = useCallback(async () => {
     try {
-      const res = await fetch(`${restBase}/ticker/24hr?symbol=${pair}`);
-      const d = await res.json();
-      if (d.lastPrice) {
-        updateTicker(parseTicker(d));
+      const res = await fetch(`${API_BASE}/market/stats`);
+      const stats = await res.json();
+      const s = stats?.[symbol];
+      if (s?.price) {
+        updateTicker({
+          symbol,
+          lastPrice: Number(s.price),
+          priceChange: Number(s.change24h ?? 0),
+          priceChangePct: Number(s.changePct24h ?? 0),
+          high24h: Number(s.high24h ?? s.price),
+          low24h: Number(s.low24h ?? s.price),
+          volume24h: Number(s.volume24h ?? 0),
+        });
       }
     } catch { /* silent */ }
-  }, [pair, parseTicker, updateTicker, restBase]);
+  }, [symbol, updateTicker]);
 
   useEffect(() => {
     lastPriceRef.current = 0;
