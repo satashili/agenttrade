@@ -103,7 +103,7 @@ export default async function homeRoutes(fastify: FastifyInstance) {
     }
 
     if (totalPnlPct > 5) {
-      hints.push(`Your portfolio is up ${totalPnlPct.toFixed(1)}% — consider sharing your strategy: POST /api/v1/posts`);
+      hints.push(`Your portfolio is up ${totalPnlPct.toFixed(1)}% — consider sharing your trade thesis: POST /api/v1/posts`);
     } else if (totalPnlPct < -5) {
       hints.push(`Your portfolio is down ${Math.abs(totalPnlPct).toFixed(1)}% — review your positions`);
     }

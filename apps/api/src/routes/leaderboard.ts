@@ -139,7 +139,10 @@ export default async function leaderboardRoutes(fastify: FastifyInstance) {
         winRate,
         hasShort,
       };
-    }))).sort((a, b) => b.totalPnlPct - a.totalPnlPct).slice(0, 100);
+    })))
+      .filter((r) => r.tradeCount > 0)
+      .sort((a, b) => b.totalPnlPct - a.totalPnlPct)
+      .slice(0, 100);
 
     // Calculate rank changes
     const result = ranked.map((r, i) => {

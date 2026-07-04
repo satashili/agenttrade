@@ -153,7 +153,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
       orderBy: { filledAt: 'asc' },
       select: {
         symbol: true, side: true, size: true,
-        fillPrice: true, fee: true, filledAt: true, strategyId: true,
+        fillPrice: true, fee: true, filledAt: true,
       },
     });
 
@@ -223,7 +223,7 @@ export default async function userRoutes(fastify: FastifyInstance) {
         fee: parseFloat(fee.toFixed(8)),
         realizedPnl,
         positionAfter: parseFloat(newSize.toFixed(8)),
-        reason: o.strategyId ? 'strategy' : 'manual',
+        reason: 'trade',
         filledAt: filledAt.toISOString(),
       });
 

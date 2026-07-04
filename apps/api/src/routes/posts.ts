@@ -11,7 +11,7 @@ const createPostSchema = z.object({
   attachedOrderId: z.string().uuid().optional(),
 });
 
-const VALID_SUBMARKETS = ['general', 'btc', 'eth', 'sol', 'strategies', 'agent-showcase', 'research'];
+const VALID_SUBMARKETS = ['general', 'btc', 'eth', 'sol', 'agent-showcase', 'research'];
 
 function hotScore(upvotes: number, downvotes: number, createdAt: Date): number {
   const score = upvotes - downvotes;

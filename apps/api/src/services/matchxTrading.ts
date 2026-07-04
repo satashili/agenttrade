@@ -21,7 +21,6 @@ export interface ExecuteMatchxOrderInput {
   type: AgentOrderType;
   size: number;
   price?: number;
-  strategyId?: string | null;
   skipCopy?: boolean;
   io: SocketServer;
 }
@@ -61,7 +60,6 @@ export async function executeMatchxOrder(
       type: input.type,
       size: input.size,
       requestedPrice: input.price,
-      strategyId: input.strategyId || null,
       matchxOrder: result.order,
       trades: result.trades,
     });
@@ -92,7 +90,7 @@ async function replicateMatchxToCopiers(
   leaderInput: ExecuteMatchxOrderInput,
   trades: MatchxTradeInfo[]
 ) {
-  if (leaderInput.strategyId || leaderInput.skipCopy) return;
+  if (leaderInput.skipCopy) return;
 
   const fill = summarizeTrades(trades);
   if (fill.quantity <= 0 || fill.avgPrice <= 0) return;
@@ -212,7 +210,6 @@ async function persistMatchxOrder(
     type: AgentOrderType;
     size: number;
     requestedPrice?: number;
-    strategyId: string | null;
     matchxOrder?: any;
     trades: MatchxTradeInfo[];
   }
@@ -235,7 +232,6 @@ async function persistMatchxOrder(
     fee: fill.fee > 0 ? new Prisma.Decimal(fill.fee) : null,
     status,
     filledAt: fill.quantity > 0 ? new Date(fill.tradeTime || Date.now()) : null,
-    strategyId: input.strategyId,
     matchxOrderId: matchxOrderId ? BigInt(matchxOrderId) : null,
   };
 
@@ -295,21 +291,19 @@ async function publishTradeSideEffects(
     },
   }).catch(() => {});
 
-  if (!input.strategyId) {
-    const now = new Date();
-    const seconds = now.getTime() / 1000 - 1134028003;
-    const tradeHotScore = parseFloat((seconds / 45000).toFixed(7));
-    await prisma.post.create({
-      data: {
-        authorId: input.userId,
-        submarket: input.symbol.toLowerCase(),
-        title: `${input.agentName} ${input.side} ${fill.quantity} ${input.symbol} @ $${fill.avgPrice}`,
-        postType: 'trade',
-        attachedOrderId: localOrder.id,
-        hotScore: tradeHotScore,
-      },
-    }).catch(() => {});
-  }
+  const now = new Date();
+  const seconds = now.getTime() / 1000 - 1134028003;
+  const tradeHotScore = parseFloat((seconds / 45000).toFixed(7));
+  await prisma.post.create({
+    data: {
+      authorId: input.userId,
+      submarket: input.symbol.toLowerCase(),
+      title: `${input.agentName} ${input.side} ${fill.quantity} ${input.symbol} @ $${fill.avgPrice}`,
+      postType: 'trade',
+      attachedOrderId: localOrder.id,
+      hotScore: tradeHotScore,
+    },
+  }).catch(() => {});
 }
 
 function aggregatePositions(positions: MatchxPositionInfo[]): Record<string, { size: number; avgCost: number }> {
@@ -349,9 +343,12 @@ function accountEquity(account: { totalEquity?: number; walletBalance?: number; 
 
 function roundCopySize(symbol: string, size: number): number {
   if (!Number.isFinite(size) || size <= 0) return 0;
-  if (symbol === 'BTC') return parseFloat(size.toFixed(5));
-  if (symbol === 'ETH') return parseFloat(size.toFixed(4));
-  return parseFloat(size.toFixed(2));
+  return truncateSize(size, 3);
+}
+
+function truncateSize(size: number, precision: number): number {
+  const factor = 10 ** precision;
+  return Math.floor(size * factor) / factor;
 }
 
 function summarizeTrades(trades: MatchxTradeInfo[]) {

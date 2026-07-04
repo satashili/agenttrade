@@ -35,6 +35,34 @@ enum OrderStatus {
   failed
 }
 
+enum AiAgentStatus {
+  active
+  paused
+  stopped
+}
+
+enum AiTradeAction {
+  hold
+  buy
+  sell
+  close
+  reduce
+  increase
+}
+
+enum AiPositionSide {
+  none
+  long
+  short
+}
+
+enum AiDecisionStatus {
+  held
+  rejected
+  executed
+  failed
+}
+
 model User {
   id            String      @id @default(uuid())
   type          UserType
@@ -72,9 +100,7 @@ model User {
   chatMessages     ChatMessage[]
   copyLeading      CopyFollow[]   @relation("copyLeader")
   copyFollowing    CopyFollow[]   @relation("copyFollower")
-  strategies       Strategy[]
-  profitSharesFrom ProfitShare[]  @relation("profitShareFrom")
-  profitSharesTo   ProfitShare[]  @relation("profitShareTo")
+  aiAgents         AiAgent[]
 
   @@index([apiKey])
   @@index([type, claimStatus])
@@ -136,8 +162,6 @@ model Order {
   status        OrderStatus @default(pending)
   createdAt     DateTime    @default(now())
   filledAt      DateTime?
-
-  strategyId String?
 
   attachedPost Post?
 
@@ -257,84 +281,141 @@ model Notification {
   @@index([createdAt(sort: Desc)])
 }
 
-enum StrategyStatus {
-  active
-  paused
-  stopped
-}
-
-model Strategy {
-  id                   String             @id @default(cuid())
-  userId               String
-  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name                 String
-  description          String?
-  symbol               String
-  visibility           String             @default("public")
-  status               StrategyStatus     @default(active)
-  config               Json
-  checkIntervalSeconds Int                @default(30)
-  lastCheckedAt        DateTime?
-  lastTriggeredAt      DateTime?
-  pauseReason          String?
-  totalTrades          Int                @default(0)
-  winCount             Int                @default(0)
-  totalPnl             Decimal            @default(0) @db.Decimal(20, 8)
-  maxDrawdown          Decimal            @default(0) @db.Decimal(20, 8)
-  allocatedCapital     Decimal            @default(0) @db.Decimal(20, 8)
-  currentCash          Decimal            @default(0) @db.Decimal(20, 8)
-  initialEquity        Decimal            @default(0) @db.Decimal(20, 8)
-  forkedFromId         String?
-  forkedFrom           Strategy?          @relation("StrategyFork", fields: [forkedFromId], references: [id])
-  forks                Strategy[]         @relation("StrategyFork")
-  forkCount            Int                @default(0)
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-  logs                 StrategyLog[]
-  positions            StrategyPosition[]
+model AiAgent {
+  id                      String             @id @default(cuid())
+  userId                  String
+  user                    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                    String
+  symbol                  String
+  personality             String
+  investmentStyle         String
+  riskPreference          String
+  model                   String             @default("local-ai-v1")
+  promptVersion           String             @default("ai-trader-v1")
+  status                  AiAgentStatus      @default(active)
+  decisionIntervalSeconds Int                @default(1800)
+  cooldownSeconds         Int                @default(1800)
+  lastDecisionAt          DateTime?
+  nextDecisionAt          DateTime?
+  lastTradeAt             DateTime?
+  cooldownUntil           DateTime?
+  totalDecisions          Int                @default(0)
+  totalTrades             Int                @default(0)
+  totalPnl                Decimal            @default(0) @db.Decimal(20, 8)
+  score                   Float              @default(0)
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  decisions               AiDecision[]
+  scores                  AiAgentScoreDaily[]
 
   @@index([userId, status])
-  @@index([status, lastCheckedAt])
-  @@index([visibility, status])
+  @@index([status, nextDecisionAt])
+  @@index([symbol, status])
 }
 
-model StrategyLog {
-  id         String   @id @default(cuid())
-  strategyId String
-  strategy   Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
-  event      String
-  details    Json     @default("{}")
-  orderId    String?
-  createdAt  DateTime @default(now())
+model AiDecision {
+  id                 String           @id @default(cuid())
+  agentId            String
+  agent              AiAgent          @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  userId             String
+  symbol             String
+  action             AiTradeAction
+  side               AiPositionSide   @default(none)
+  confidence         Float
+  sizePct            Float
+  riskLevel          String
+  reasonSummary      String           @db.VarChar(1000)
+  langfuseTraceId    String?
+  status             AiDecisionStatus @default(held)
+  rejectReason       String?
+  orderId            String?
+  intendedSize       Decimal?         @db.Decimal(20, 8)
+  fillPrice          Decimal?         @db.Decimal(20, 8)
+  realizedPnl        Decimal?         @db.Decimal(20, 8)
+  createdAt          DateTime         @default(now())
+  executedAt         DateTime?
+  marketSnapshot     AiMarketSnapshot?
+  riskChecks         AiRiskCheck[]
+  toolCalls          AiToolCall[]
 
-  @@index([strategyId, createdAt])
+  @@index([agentId, createdAt])
+  @@index([userId, createdAt])
+  @@index([symbol, createdAt])
+  @@index([status, createdAt])
+  @@index([orderId])
 }
 
-model StrategyPosition {
-  id         String   @id @default(cuid())
-  strategyId String
-  strategy   Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
-  symbol     String
-  size       Decimal  @default(0) @db.Decimal(20, 8)
-  avgCost    Decimal  @default(0) @db.Decimal(20, 8)
+model AiToolCall {
+  id         String     @id @default(cuid())
+  decisionId String
+  decision   AiDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  agentId    String
+  step       Int
+  toolName   String
+  input      Json
+  output     Json
+  latencyMs  Int
+  createdAt  DateTime   @default(now())
 
-  @@unique([strategyId, symbol])
+  @@index([decisionId, step])
+  @@index([agentId, createdAt])
+  @@index([toolName, createdAt])
 }
 
-model ProfitShare {
-  id          String   @id @default(uuid())
-  fromUserId  String
-  fromUser    User     @relation("profitShareFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  toUserId    String
-  toUser      User     @relation("profitShareTo", fields: [toUserId], references: [id], onDelete: Cascade)
-  amount      Decimal  @db.Decimal(20, 8)
-  type        String // "fork" or "copy_trade"
-  strategyId  String?
-  orderId     String?
-  totalProfit Decimal  @db.Decimal(20, 8)
-  shareRate   Decimal  @default(0.10) @db.Decimal(5, 4)
-  createdAt   DateTime @default(now())
+model AiMarketSnapshot {
+  id              String     @id @default(cuid())
+  decisionId      String     @unique
+  decision        AiDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  symbol          String
+  price           Decimal    @db.Decimal(20, 8)
+  positionSize    Decimal    @default(0) @db.Decimal(20, 8)
+  positionAvgCost Decimal    @default(0) @db.Decimal(20, 8)
+  cashBalance     Decimal    @default(0) @db.Decimal(20, 8)
+  totalEquity     Decimal    @default(0) @db.Decimal(20, 8)
+  ema20           Decimal?   @db.Decimal(20, 8)
+  ema60           Decimal?   @db.Decimal(20, 8)
+  rsi14           Decimal?   @db.Decimal(20, 8)
+  atr14           Decimal?   @db.Decimal(20, 8)
+  priceChangePct  Decimal?   @db.Decimal(20, 8)
+  trendScore      Float      @default(0)
+  volatilityScore Float      @default(0)
+  createdAt       DateTime   @default(now())
 
-  @@index([fromUserId])
-  @@index([toUserId])
+  @@index([symbol, createdAt])
+}
+
+model AiRiskCheck {
+  id         String     @id @default(cuid())
+  decisionId String
+  decision   AiDecision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  name       String
+  passed     Boolean
+  message    String?
+  createdAt  DateTime   @default(now())
+
+  @@index([decisionId])
+  @@index([passed, createdAt])
+}
+
+model AiAgentScoreDaily {
+  id            String   @id @default(cuid())
+  agentId       String
+  agent         AiAgent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  day           DateTime
+  decisions     Int      @default(0)
+  trades        Int      @default(0)
+  winCount      Int      @default(0)
+  pnl           Decimal  @default(0) @db.Decimal(20, 8)
+  maxDrawdown   Decimal  @default(0) @db.Decimal(20, 8)
+  score         Float    @default(0)
+  inverseScore  Float    @default(0)
+  stableWinner  Boolean  @default(false)
+  stableLoser   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([agentId, day])
+  @@index([day, score])
+  @@index([stableWinner])
+  @@index([stableLoser])
 }

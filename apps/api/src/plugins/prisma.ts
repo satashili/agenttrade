@@ -1,6 +1,7 @@
 import fp from 'fastify-plugin';
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
+import { shutdownLangfuse } from '../services/langfuseTracing.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -15,6 +16,7 @@ export default fp(async (fastify: FastifyInstance) => {
   await prisma.$connect();
   fastify.decorate('prisma', prisma);
   fastify.addHook('onClose', async () => {
+    await shutdownLangfuse().catch(() => {});
     await prisma.$disconnect();
   });
 });

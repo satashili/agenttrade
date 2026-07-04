@@ -1,5 +1,5 @@
 /**
- * Technical indicators for strategy evaluation.
+ * Technical indicators for AI trading evaluation.
  * All functions operate on arrays of close prices (oldest first).
  */
 
