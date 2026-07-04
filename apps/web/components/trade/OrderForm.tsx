@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMarketStore, useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 
 type Sym  = 'BTC' | 'ETH' | 'TSLA' | 'AMZN' | 'COIN' | 'MSTR' | 'INTC' | 'HOOD' | 'CRCL' | 'PLTR';
 type Side = 'buy' | 'sell';
@@ -13,13 +14,13 @@ const DECIMALS: Record<Sym, number> = {
   BTC: 0, ETH: 2, TSLA: 2, AMZN: 2, COIN: 2, MSTR: 2, INTC: 2, HOOD: 2, CRCL: 2, PLTR: 2,
 };
 
-function fmtPrice(p: number, sym: Sym) {
+function fmtPrice(p: number, sym: Sym, locale: string) {
   const d = DECIMALS[sym];
-  return p.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  return p.toLocaleString(locale, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
-function fmtUsd(n: number) {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function fmtUsd(n: number, locale: string) {
+  return n.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 interface PositionInfo {
@@ -56,6 +57,7 @@ export function OrderForm({ symbol }: Props) {
 
   const { prices }      = useMarketStore();
   const { token, user } = useAuthStore();
+  const { t, locale } = useI18n();
   const currentPrice    = prices[symbol] ?? 0;
 
   const execPrice = otype === 'market' ? currentPrice : parseFloat(price) || 0;
@@ -90,7 +92,7 @@ export function OrderForm({ symbol }: Props) {
       const body: Record<string, unknown> = { symbol, side, type: otype, size: sizeNum };
       if (otype === 'limit' || otype === 'stop') body.price = parseFloat(price);
       await api.post('/api/v1/orders', body);
-      setSuccess(`${side === 'buy' ? 'Buy' : 'Sell'} ${sizeNum} ${symbol} filled`);
+      setSuccess(t(`${side === 'buy' ? 'Buy' : 'Sell'} ${sizeNum} ${symbol} filled`));
       setSize(''); setPrice('');
       fetchPortfolio();
     } catch (err: any) {
@@ -113,7 +115,7 @@ export function OrderForm({ symbol }: Props) {
         : closedSize * (position.avgCost - fillPrice);
       const fee = closedSize * fillPrice * 0.001;
       setCloseResult({ pnl: pnl - fee, symbol });
-      setSuccess(`Closed ${symbol} position`);
+      setSuccess(t(`Closed ${symbol} position`));
       fetchPortfolio();
     } catch (err: any) {
       setError(err.message || 'Failed to close position');
@@ -133,7 +135,7 @@ export function OrderForm({ symbol }: Props) {
               ? 'text-[#0ECB81] border-b-2 border-[#0ECB81] bg-[#0ECB81]/5'
               : 'text-slate-500 hover:text-slate-300 border-b border-border'
           }`}
-        >Long / Buy</button>
+        >{t('Long / Buy')}</button>
         <button
           onClick={() => setSide('sell')}
           className={`py-2.5 transition-colors ${
@@ -141,50 +143,50 @@ export function OrderForm({ symbol }: Props) {
               ? 'text-[#F6465D] border-b-2 border-[#F6465D] bg-[#F6465D]/5'
               : 'text-slate-500 hover:text-slate-300 border-b border-border'
           }`}
-        >Short / Sell</button>
+        >{t('Short / Sell')}</button>
       </div>
 
       <div className="p-3 space-y-2.5">
         {/* Order type selector */}
         <div className="flex gap-1 bg-bg-secondary rounded p-0.5">
-          {(['market', 'limit', 'stop'] as OType[]).map(t => (
+          {(['market', 'limit', 'stop'] as OType[]).map(type => (
             <button
-              key={t}
-              onClick={() => setOtype(t)}
+              key={type}
+              onClick={() => setOtype(type)}
               className={`flex-1 py-1.5 text-xs rounded transition-colors capitalize ${
-                otype === t ? 'bg-bg-hover text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                otype === type ? 'bg-bg-hover text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
               }`}
-            >{t}</button>
+            >{t(type)}</button>
           ))}
         </div>
 
         {!token ? (
           <div className="text-center py-6 space-y-2">
-            <p className="text-slate-500 text-xs">Login to trade</p>
+            <p className="text-slate-500 text-xs">{t('Login to trade')}</p>
             <a
               href="/login"
               className="inline-block text-xs bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded transition-colors"
-            >Login</a>
+            >{t('Login')}</a>
           </div>
         ) : (
           <>
             <form onSubmit={submit} className="space-y-2.5">
               {/* Balance & buying power */}
               <div className="flex justify-between text-[10px] text-slate-500">
-                <span>Balance: <span className="text-slate-300 tabular-nums">${fmtUsd(cashBalance)}</span></span>
-                <span>Buying Power: <span className="text-[#1E6FFF] tabular-nums font-medium">${fmtUsd(maxValue)}</span></span>
+                <span>{t('Balance')}: <span className="text-slate-300 tabular-nums">${fmtUsd(cashBalance, locale)}</span></span>
+                <span>{t('Buying Power')}: <span className="text-[#1E6FFF] tabular-nums font-medium">${fmtUsd(maxValue, locale)}</span></span>
               </div>
 
               {/* Price input for limit / stop */}
               {otype !== 'market' && (
                 <div>
                   <label className="text-[10px] text-slate-500 block mb-1">
-                    {otype === 'stop' ? 'Stop Price' : 'Price'} (USDT)
+                    {otype === 'stop' ? t('Stop Price') : t('Price')} (USDT)
                   </label>
                   <input
                     type="number" value={price}
                     onChange={e => setPrice(e.target.value)}
-                    placeholder={currentPrice ? fmtPrice(currentPrice, symbol) : '0'}
+                    placeholder={currentPrice ? fmtPrice(currentPrice, symbol, locale) : '0'}
                     className="w-full bg-bg-secondary border border-border rounded px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-accent tabular-nums"
                     step="any" min="0"
                   />
@@ -193,7 +195,7 @@ export function OrderForm({ symbol }: Props) {
 
               {/* Leverage selector */}
               <div>
-                <label className="text-[10px] text-slate-500 block mb-1">Leverage</label>
+                <label className="text-[10px] text-slate-500 block mb-1">{t('Leverage')}</label>
                 <div className="flex gap-1 bg-bg-secondary rounded p-0.5">
                   {LEVERAGE_OPTIONS.map(lv => (
                     <button
@@ -213,18 +215,18 @@ export function OrderForm({ symbol }: Props) {
               {/* Market price hint */}
               {otype === 'market' && (
                 <div className="flex justify-between text-[10px]">
-                  <span className="text-slate-500">Market Price</span>
-                  <span className="text-white tabular-nums font-medium">${fmtPrice(currentPrice, symbol)}</span>
+                  <span className="text-slate-500">{t('Market Price')}</span>
+                  <span className="text-white tabular-nums font-medium">${fmtPrice(currentPrice, symbol, locale)}</span>
                 </div>
               )}
 
               {/* Size */}
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <label className="text-[10px] text-slate-500">Amount ({symbol})</label>
+                  <label className="text-[10px] text-slate-500">{t('Amount')} ({symbol})</label>
                   {execPrice > 0 && (
                     <span className="text-[9px] text-slate-600">
-                      Max: <span className="text-slate-500 tabular-nums">{maxSize >= 1000 ? maxSize.toFixed(2) : maxSize.toFixed(4)}</span>
+                      {t('Max')}: <span className="text-slate-500 tabular-nums">{maxSize >= 1000 ? maxSize.toFixed(2) : maxSize.toFixed(4)}</span>
                     </span>
                   )}
                 </div>
@@ -257,16 +259,16 @@ export function OrderForm({ symbol }: Props) {
               {/* Total */}
               {total !== null && (
                 <div className="flex justify-between text-[10px]">
-                  <span className="text-slate-500">Total</span>
-                  <span className="text-slate-300 tabular-nums">${fmtUsd(total)}</span>
+                  <span className="text-slate-500">{t('Total')}</span>
+                  <span className="text-slate-300 tabular-nums">${fmtUsd(total, locale)}</span>
                 </div>
               )}
 
               {/* Margin required */}
               {total !== null && (
                 <div className="flex justify-between text-[10px]">
-                  <span className="text-slate-500">Margin ({selectedLeverage}x)</span>
-                  <span className="text-slate-300 tabular-nums">${fmtUsd(total / selectedLeverage)}</span>
+                  <span className="text-slate-500">{t('Margin')} ({selectedLeverage}x)</span>
+                  <span className="text-slate-300 tabular-nums">${fmtUsd(total / selectedLeverage, locale)}</span>
                 </div>
               )}
 
@@ -284,7 +286,7 @@ export function OrderForm({ symbol }: Props) {
               )}
               {closeResult && (
                 <div className={`flex items-center justify-between gap-1 text-[11px] font-medium rounded px-2 py-1 ${closeResult.pnl >= 0 ? 'text-green-trade bg-green-trade/10' : 'text-red-trade bg-red-trade/10'}`}>
-                  <span>Realized P&L: {closeResult.pnl >= 0 ? '+' : ''}${fmtUsd(closeResult.pnl)}</span>
+                  <span>{t('Realized P&L')}: {closeResult.pnl >= 0 ? '+' : ''}${fmtUsd(closeResult.pnl, locale)}</span>
                   <button onClick={() => setCloseResult(null)} className="opacity-60 hover:opacity-100 text-sm leading-none">&times;</button>
                 </div>
               )}
@@ -298,7 +300,7 @@ export function OrderForm({ symbol }: Props) {
                     : 'bg-[#F6465D] hover:bg-[#F6465D]/80 text-white'
                 }`}
               >
-                {loading ? 'Submitting…' : `${side === 'buy' ? 'Buy' : 'Sell'} ${symbol}`}
+                {loading ? t('Submitting…') : `${side === 'buy' ? t('Buy') : t('Sell')} ${symbol}`}
               </button>
             </form>
 
@@ -306,19 +308,19 @@ export function OrderForm({ symbol }: Props) {
             {position && (
               <div className="mt-2 p-2.5 rounded bg-bg-secondary border border-border/50 space-y-1.5">
                 <div className="flex justify-between text-[10px]">
-                  <span className="text-slate-500">Position</span>
+                  <span className="text-slate-500">{t('Position')}</span>
                   <span className={`font-medium ${position.side === 'long' ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
                     {position.side === 'long' ? '▲ LONG' : '▼ SHORT'} {Math.abs(position.size)} {symbol}
                   </span>
                 </div>
                 <div className="flex justify-between text-[10px]">
-                  <span className="text-slate-500">Entry</span>
-                  <span className="text-slate-300 tabular-nums">${fmtPrice(position.avgCost, symbol)}</span>
+                  <span className="text-slate-500">{t('Entry')}</span>
+                  <span className="text-slate-300 tabular-nums">${fmtPrice(position.avgCost, symbol, locale)}</span>
                 </div>
                 <div className="flex justify-between text-[10px]">
-                  <span className="text-slate-500">Unrealized P&L</span>
+                  <span className="text-slate-500">{t('Unrealized P&L')}</span>
                   <span className={`tabular-nums font-medium ${position.unrealizedPnl >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
-                    {position.unrealizedPnl >= 0 ? '+' : ''}${fmtUsd(position.unrealizedPnl)} ({position.unrealizedPnlPct >= 0 ? '+' : ''}{position.unrealizedPnlPct.toFixed(2)}%)
+                    {position.unrealizedPnl >= 0 ? '+' : ''}${fmtUsd(position.unrealizedPnl, locale)} ({position.unrealizedPnlPct >= 0 ? '+' : ''}{position.unrealizedPnlPct.toFixed(2)}%)
                   </span>
                 </div>
                 <button
@@ -326,7 +328,7 @@ export function OrderForm({ symbol }: Props) {
                   disabled={loading}
                   className="w-full py-1.5 rounded text-xs font-bold bg-slate-700 hover:bg-slate-600 text-white transition-colors disabled:opacity-30 mt-1"
                 >
-                  {loading ? 'Closing…' : `Close ${symbol} Position`}
+                  {loading ? t('Closing…') : t(`Close ${symbol} Position`)}
                 </button>
               </div>
             )}

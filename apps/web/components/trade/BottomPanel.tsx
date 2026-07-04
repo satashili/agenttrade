@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore, useMarketStore } from '@/lib/store';
 import { api } from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 
 type Sym = string;
 type Tab = 'activity' | 'history' | 'positions' | 'open' | 'assets';
@@ -61,20 +62,20 @@ interface TradeRecord {
   filledAt: string | null;
 }
 
-function usd(n: number) {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function usd(n: number, locale = 'en-US') {
+  return n.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function fmtDate(s: string) {
-  return new Date(s).toLocaleString('en-US', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+function fmtDate(s: string, locale = 'en-US') {
+  return new Date(s).toLocaleString(locale, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
-function timeAgo(ts: number): string {
+function timeAgo(ts: number, t: (text: string) => string): string {
   const diff = Math.floor((Date.now() - ts) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+  if (diff < 60) return t(`${diff}s ago`);
+  if (diff < 3600) return t(`${Math.floor(diff / 60)}m ago`);
+  if (diff < 86400) return t(`${Math.floor(diff / 3600)}h ago`);
+  return t(`${Math.floor(diff / 86400)}d ago`);
 }
 
 export function BottomPanel({ symbol, height = 220 }: Props) {
@@ -86,6 +87,7 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
   const [loading, setLoading] = useState(false);
   const { token, user } = useAuthStore();
   const { tradeActivity } = useMarketStore();
+  const { t, locale } = useI18n();
 
   const isLoggedIn = !!token;
 
@@ -189,22 +191,22 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
     <div className="border-t border-border bg-bg-card flex flex-col" style={{ height }}>
       {/* Tab bar */}
       <div className="flex border-b border-border shrink-0">
-        {TABS.map(t => (
+        {TABS.map(tabItem => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+            key={tabItem.id}
+            onClick={() => setTab(tabItem.id)}
             className={`px-4 py-2 text-xs font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-              tab === t.id
+              tab === tabItem.id
                 ? 'text-white border-b-2 border-accent -mb-px'
                 : 'text-slate-500 hover:text-slate-300'
             }`}
           >
-            {t.label}
-            {t.id === 'activity' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[#0ECB81] animate-pulse" title="Live — real-time updates via WebSocket" />
+            {t(tabItem.label)}
+            {tabItem.id === 'activity' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[#0ECB81] animate-pulse" title={t('Live — real-time updates via WebSocket')} />
             )}
-            {t.badge ? (
-              <span className={`bg-accent/30 text-accent text-[10px] px-1.5 py-px rounded-full font-semibold border border-accent/20 ${popBadge === t.id ? 'badge-pop' : ''}`}>{t.badge}</span>
+            {tabItem.badge ? (
+              <span className={`bg-accent/30 text-accent text-[10px] px-1.5 py-px rounded-full font-semibold border border-accent/20 ${popBadge === tabItem.id ? 'badge-pop' : ''}`}>{tabItem.badge}</span>
             ) : null}
           </button>
         ))}
@@ -212,14 +214,14 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
         <button
           onClick={refresh}
           className="px-3 text-[10px] text-slate-600 hover:text-slate-400 transition-colors"
-        >↻ Refresh</button>
+        >↻ {t('Refresh')}</button>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
         {loading && (
           <div className="flex items-center justify-center h-full">
-            <span className="text-xs text-slate-600 animate-pulse">Loading...</span>
+            <span className="text-xs text-slate-600 animate-pulse">{t('Loading...')}</span>
           </div>
         )}
 
@@ -230,19 +232,19 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
               <table className="w-full text-xs" style={{ tableLayout: 'fixed' }}>
                 <thead className="sticky top-0 bg-bg-card z-10">
                   <tr className="text-[10px] text-slate-500 border-b border-border/50">
-                    <th className="px-3 py-1.5 font-normal text-left" style={{ width: '22%' }}>Agent</th>
-                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '12%' }}>Side</th>
-                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '14%' }}>Symbol</th>
-                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '18%' }}>Size</th>
-                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '18%' }}>Price</th>
-                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '16%' }}>Time</th>
+                    <th className="px-3 py-1.5 font-normal text-left" style={{ width: '22%' }}>{t('Agent')}</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '12%' }}>{t('Side')}</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '14%' }}>{t('Symbol')}</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '18%' }}>{t('Size')}</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '18%' }}>{t('Price')}</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '16%' }}>{t('Time')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {allActivity.length === 0 ? (
                     <tr><td colSpan={6} className="text-center py-8 text-xs">
-                      <div className="text-slate-600">No AI activity yet</div>
-                      <div className="text-slate-700 mt-1">Trades from AI agents will appear here in real-time</div>
+                      <div className="text-slate-600">{t('No AI activity yet')}</div>
+                      <div className="text-slate-700 mt-1">{t('Trades from AI agents will appear here in real-time')}</div>
                     </td></tr>
                   ) : allActivity.map((a) => (
                     <tr key={a.id} className="border-b border-border/20 hover:bg-bg-secondary/50">
@@ -254,8 +256,8 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
                       </td>
                       <td className="px-3 py-1.5 text-right text-slate-300">{a.symbol}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{a.size}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(a.price)}</td>
-                      <td className="px-3 py-1.5 text-right text-slate-500 text-[10px]">{a.ts ? timeAgo(a.ts) : '—'}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(a.price, locale)}</td>
+                      <td className="px-3 py-1.5 text-right text-slate-500 text-[10px]">{a.ts ? timeAgo(a.ts, t) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -267,20 +269,20 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
               <table className="w-full text-xs" style={{ tableLayout: 'fixed' }}>
                 <thead className="sticky top-0 bg-bg-card z-10">
                   <tr className="text-[10px] text-slate-500 border-b border-border/50">
-                    <th className="px-3 py-1.5 font-normal text-left" style={{ width: '20%' }}>Agent</th>
-                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '12%' }}>Symbol</th>
-                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '10%' }}>Side</th>
-                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '16%' }}>Size</th>
-                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '16%' }}>Price</th>
-                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '14%' }}>Value</th>
-                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '12%' }}>Time</th>
+                    <th className="px-3 py-1.5 font-normal text-left" style={{ width: '20%' }}>{t('Agent')}</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '12%' }}>{t('Symbol')}</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '10%' }}>{t('Side')}</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '16%' }}>{t('Size')}</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '16%' }}>{t('Price')}</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '14%' }}>{t('Value')}</th>
+                    <th className="px-3 py-1.5 font-normal text-right" style={{ width: '12%' }}>{t('Time')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {platformTrades.length === 0 ? (
                     <tr><td colSpan={7} className="text-center py-8 text-xs">
-                      <div className="text-slate-600">No trades yet</div>
-                      <div className="text-slate-700 mt-1">Agent trades will show up here once they start executing</div>
+                      <div className="text-slate-600">{t('No trades yet')}</div>
+                      <div className="text-slate-700 mt-1">{t('Agent trades will show up here once they start executing')}</div>
                     </td></tr>
                   ) : platformTrades.map(t => (
                     <tr key={t.id} className="border-b border-border/20 hover:bg-bg-secondary/50">
@@ -292,9 +294,9 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
                         </span>
                       </td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{t.size}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{t.price ? `$${usd(t.price)}` : '—'}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{t.value ? `$${usd(t.value)}` : '—'}</td>
-                      <td className="px-3 py-1.5 text-right text-slate-500 text-[10px]">{t.filledAt ? fmtDate(t.filledAt) : '—'}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{t.price ? `$${usd(t.price, locale)}` : '—'}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{t.value ? `$${usd(t.value, locale)}` : '—'}</td>
+                      <td className="px-3 py-1.5 text-right text-slate-500 text-[10px]">{t.filledAt ? fmtDate(t.filledAt, locale) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -306,26 +308,26 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
                 <thead className="sticky top-0 bg-bg-card z-10">
                   <tr className="text-[10px] text-slate-500 border-b border-border/50">
                     {['Symbol', 'Type', 'Side', 'Avg Price', 'Size', 'Status', 'Fee', 'Date'].map(h => (
-                      <th key={h} className={`px-3 py-1.5 font-normal ${h === 'Symbol' || h === 'Type' ? 'text-left' : 'text-right'}`}>{h}</th>
+                      <th key={h} className={`px-3 py-1.5 font-normal ${h === 'Symbol' || h === 'Type' ? 'text-left' : 'text-right'}`}>{t(h)}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {historyOrders.length === 0 ? (
                     <tr><td colSpan={8} className="text-center py-8 text-xs">
-                      <div className="text-slate-600">No order history</div>
-                      <div className="text-slate-700 mt-1">Your completed and cancelled orders will appear here</div>
+                      <div className="text-slate-600">{t('No order history')}</div>
+                      <div className="text-slate-700 mt-1">{t('Your completed and cancelled orders will appear here')}</div>
                     </td></tr>
                   ) : historyOrders.map(o => (
                     <tr key={o.id} className="border-b border-border/20 hover:bg-bg-secondary/50">
                       <td className="px-3 py-1.5 font-medium text-white">{o.symbol}</td>
                       <td className="px-3 py-1.5 text-slate-400 capitalize">{o.type}</td>
                       <td className={`px-3 py-1.5 text-right capitalize font-medium ${o.side === 'buy' ? 'text-green-trade' : 'text-red-trade'}`}>{o.side}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{o.avgFillPrice ? `$${usd(o.avgFillPrice)}` : '—'}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{o.avgFillPrice ? `$${usd(o.avgFillPrice, locale)}` : '—'}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{o.size}</td>
                       <td className={`px-3 py-1.5 text-right capitalize ${o.status === 'filled' ? 'text-green-trade' : 'text-slate-400'}`}>{o.status}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-500">{o.fee ? `$${o.fee.toFixed(4)}` : '—'}</td>
-                      <td className="px-3 py-1.5 text-right text-slate-500 text-[10px]">{fmtDate(o.createdAt)}</td>
+                      <td className="px-3 py-1.5 text-right text-slate-500 text-[10px]">{fmtDate(o.createdAt, locale)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -338,25 +340,25 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
                 <thead className="sticky top-0 bg-bg-card z-10">
                   <tr className="text-[10px] text-slate-500 border-b border-border/50">
                     {['Symbol', 'Size', 'Avg Cost', 'Mark Price', 'Value', 'PnL', 'PnL%'].map(h => (
-                      <th key={h} className={`px-3 py-1.5 font-normal ${h === 'Symbol' ? 'text-left' : 'text-right'}`}>{h}</th>
+                      <th key={h} className={`px-3 py-1.5 font-normal ${h === 'Symbol' ? 'text-left' : 'text-right'}`}>{t(h)}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {!portfolio || Object.keys(portfolio.positions).length === 0 ? (
                     <tr><td colSpan={7} className="text-center py-8 text-xs">
-                      <div className="text-slate-600">No open positions</div>
-                      <div className="text-slate-700 mt-1">Place an order to open your first position</div>
+                      <div className="text-slate-600">{t('No open positions')}</div>
+                      <div className="text-slate-700 mt-1">{t('Place an order to open your first position')}</div>
                     </td></tr>
                   ) : Object.values(portfolio.positions).map((p, i) => (
                     <tr key={i} className="border-b border-border/20 hover:bg-bg-secondary/50">
                       <td className="px-3 py-1.5 font-medium text-white">{p.symbol}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{p.size}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(p.avgCost)}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(p.currentPrice)}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(p.value)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(p.avgCost, locale)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(p.currentPrice, locale)}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(p.value, locale)}</td>
                       <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${p.unrealizedPnl >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
-                        {p.unrealizedPnl >= 0 ? '+' : ''}${usd(Math.abs(p.unrealizedPnl))}
+                        {p.unrealizedPnl >= 0 ? '+' : ''}${usd(Math.abs(p.unrealizedPnl), locale)}
                       </td>
                       <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${p.unrealizedPnlPct >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
                         {p.unrealizedPnlPct >= 0 ? '+' : ''}{p.unrealizedPnlPct.toFixed(2)}%
@@ -377,26 +379,26 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
                 <thead className="sticky top-0 bg-bg-card z-10">
                   <tr className="text-[10px] text-slate-500 border-b border-border/50">
                     {['Symbol', 'Type', 'Side', 'Price', 'Size', 'Status', 'Action'].map(h => (
-                      <th key={h} className={`px-3 py-1.5 font-normal ${h === 'Symbol' || h === 'Type' ? 'text-left' : 'text-right'}`}>{h}</th>
+                      <th key={h} className={`px-3 py-1.5 font-normal ${h === 'Symbol' || h === 'Type' ? 'text-left' : 'text-right'}`}>{t(h)}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {openOrders.length === 0 ? (
                     <tr><td colSpan={7} className="text-center py-8 text-xs">
-                      <div className="text-slate-600">No open orders</div>
-                      <div className="text-slate-700 mt-1">Use the order form to place a limit or stop order</div>
+                      <div className="text-slate-600">{t('No open orders')}</div>
+                      <div className="text-slate-700 mt-1">{t('Use the order form to place a limit or stop order')}</div>
                     </td></tr>
                   ) : openOrders.map(o => (
                     <tr key={o.id} className="border-b border-border/20 hover:bg-bg-secondary/50">
                       <td className="px-3 py-1.5 font-medium text-white">{o.symbol}</td>
                       <td className="px-3 py-1.5 text-slate-400 capitalize">{o.type}</td>
                       <td className={`px-3 py-1.5 text-right capitalize font-medium ${o.side === 'buy' ? 'text-green-trade' : 'text-red-trade'}`}>{o.side}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{o.price ? `$${usd(o.price)}` : 'Market'}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{o.price ? `$${usd(o.price, locale)}` : t('Market')}</td>
                       <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">{o.size}</td>
                       <td className="px-3 py-1.5 text-right text-slate-400 capitalize">{o.status}</td>
                       <td className="px-3 py-1.5 text-right">
-                        <button onClick={() => cancel(o.id)} className="text-red-trade hover:text-red-trade/70 text-[10px] transition-colors">Cancel</button>
+                        <button onClick={() => cancel(o.id)} className="text-red-trade hover:text-red-trade/70 text-[10px] transition-colors">{t('Cancel')}</button>
                       </td>
                     </tr>
                   ))}
@@ -409,17 +411,17 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
               <div className="p-4">
                 {!portfolio ? (
                   <div className="text-center py-8">
-                    <p className="text-xs text-slate-600">No portfolio data</p>
-                    <p className="text-xs text-slate-700 mt-1">Your balance and portfolio stats will appear here after your first trade</p>
+                    <p className="text-xs text-slate-600">{t('No portfolio data')}</p>
+                    <p className="text-xs text-slate-700 mt-1">{t('Your balance and portfolio stats will appear here after your first trade')}</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
-                      { label: 'Available Balance', value: `$${usd(portfolio.cashBalance)}`, sub: 'USDT', color: 'text-white' },
-                      { label: 'Total Portfolio Value', value: `$${usd(portfolio.totalValue)}`, sub: 'USDT', color: 'text-white' },
+                      { label: 'Available Balance', value: `$${usd(portfolio.cashBalance, locale)}`, sub: 'USDT', color: 'text-white' },
+                      { label: 'Total Portfolio Value', value: `$${usd(portfolio.totalValue, locale)}`, sub: 'USDT', color: 'text-white' },
                       {
                         label: 'Total PnL',
-                        value: `${portfolio.totalPnl >= 0 ? '+' : ''}$${usd(portfolio.totalPnl)}`,
+                        value: `${portfolio.totalPnl >= 0 ? '+' : ''}$${usd(portfolio.totalPnl, locale)}`,
                         sub: 'vs $100,000 initial',
                         color: portfolio.totalPnl >= 0 ? 'text-green-trade' : 'text-red-trade',
                       },
@@ -431,7 +433,7 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
                       },
                     ].map(item => (
                       <div key={item.label} className="bg-bg-secondary rounded-lg p-3 border border-border/50">
-                        <div className="text-[10px] text-slate-500 mb-1">{item.label}</div>
+                        <div className="text-[10px] text-slate-500 mb-1">{t(item.label)}</div>
                         <div className={`text-sm font-bold tabular-nums ${item.color}`}>{item.value}</div>
                         <div className="text-[10px] text-slate-600 mt-0.5">{item.sub}</div>
                       </div>
@@ -451,6 +453,7 @@ export function BottomPanel({ symbol, height = 220 }: Props) {
 function PlatformPositions() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { t, locale } = useI18n();
 
   useEffect(() => {
     api.get<{ data: any[] }>('/api/v1/leaderboard?limit=20')
@@ -459,7 +462,7 @@ function PlatformPositions() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="text-xs text-slate-600 text-center py-6 animate-pulse">Loading...</div>;
+  if (loading) return <div className="text-xs text-slate-600 text-center py-6 animate-pulse">{t('Loading...')}</div>;
 
   return (
     <table className="w-full text-xs">
@@ -473,21 +476,21 @@ function PlatformPositions() {
             { label: 'Trades', tip: 'Total number of executed trades' },
             { label: 'Win Rate', tip: 'Percentage of trades that were profitable' },
           ]).map(h => (
-            <th key={h.label} title={h.tip} className={`px-3 py-1.5 font-normal cursor-help ${h.label === 'Agent' ? 'text-left' : 'text-right'}`}>{h.label}</th>
+            <th key={h.label} title={t(h.tip)} className={`px-3 py-1.5 font-normal cursor-help ${h.label === 'Agent' ? 'text-left' : 'text-right'}`}>{t(h.label)}</th>
           ))}
         </tr>
       </thead>
       <tbody>
         {data.length === 0 ? (
           <tr><td colSpan={6} className="text-center py-8 text-xs">
-            <div className="text-slate-600">No agents trading yet</div>
-            <div className="text-slate-700 mt-1">Agent rankings will appear here once trading begins</div>
+            <div className="text-slate-600">{t('No agents trading yet')}</div>
+            <div className="text-slate-700 mt-1">{t('Agent rankings will appear here once trading begins')}</div>
           </td></tr>
         ) : data.map((a: any) => (
           <tr key={a.agent.id} className="border-b border-border/20 hover:bg-bg-secondary/50">
             <td className="px-3 py-1.5 font-medium text-white truncate max-w-[140px]">{a.agent.displayName || a.agent.name}</td>
             <td className="px-3 py-1.5 text-right text-slate-500 text-[10px]">{a.agent.aiModel || '—'}</td>
-            <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(a.totalValue)}</td>
+            <td className="px-3 py-1.5 text-right tabular-nums text-slate-300">${usd(a.totalValue, locale)}</td>
             <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${a.totalPnlPct >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
               {a.totalPnlPct >= 0 ? '+' : ''}{a.totalPnlPct.toFixed(2)}%
             </td>

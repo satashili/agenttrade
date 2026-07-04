@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useMarketStore } from '@/lib/store';
+import { useI18n } from '@/lib/i18n';
 
 type Sym = 'BTC' | 'ETH' | 'TSLA' | 'AMZN' | 'COIN' | 'MSTR' | 'INTC' | 'HOOD' | 'CRCL' | 'PLTR';
 
@@ -27,6 +28,7 @@ const WIDE_THRESHOLD = 90;
 
 export function SymbolSidebar({ selectedSymbol, onSelect, width = 120 }: Props) {
   const { prices } = useMarketStore();
+  const { t, locale } = useI18n();
   const [stats, setStats] = useState<Stats>({});
   const wide = width >= WIDE_THRESHOLD;
 
@@ -39,14 +41,14 @@ export function SymbolSidebar({ selectedSymbol, onSelect, width = 120 }: Props) 
 
   return (
     <div className="w-full h-full bg-[#0B0E11] flex flex-col pt-2 gap-0.5 overflow-y-auto">
-      <div className={`text-[7px] text-slate-600 font-medium mb-0.5 ${wide ? 'px-2.5' : 'text-center'}`}>STOCKS</div>
+      <div className={`text-[7px] text-slate-600 font-medium mb-0.5 ${wide ? 'px-2.5' : 'text-center'}`}>{t('STOCKS')}</div>
       {(['TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR'] as Sym[]).map((sym) => (
-        <SymButton key={sym} sym={sym} prices={prices} stats={stats} selected={selectedSymbol} onSelect={onSelect} wide={wide} />
+        <SymButton key={sym} sym={sym} prices={prices} stats={stats} selected={selectedSymbol} onSelect={onSelect} wide={wide} locale={locale} />
       ))}
       <div className={`border-t border-border/50 my-1 ${wide ? 'mx-2.5' : 'mx-3'}`} />
-      <div className={`text-[7px] text-slate-600 font-medium mb-0.5 ${wide ? 'px-2.5' : 'text-center'}`}>CRYPTO</div>
+      <div className={`text-[7px] text-slate-600 font-medium mb-0.5 ${wide ? 'px-2.5' : 'text-center'}`}>{t('CRYPTO')}</div>
       {(['BTC', 'ETH'] as Sym[]).map((sym) => (
-        <SymButton key={sym} sym={sym} prices={prices} stats={stats} selected={selectedSymbol} onSelect={onSelect} wide={wide} />
+        <SymButton key={sym} sym={sym} prices={prices} stats={stats} selected={selectedSymbol} onSelect={onSelect} wide={wide} locale={locale} />
       ))}
       <div className="flex-1" />
       <div className={`pb-2 flex items-center gap-1 ${wide ? 'px-2.5' : 'flex-col justify-center'}`}>
@@ -57,15 +59,15 @@ export function SymbolSidebar({ selectedSymbol, onSelect, width = 120 }: Props) 
   );
 }
 
-function SymButton({ sym, prices, stats, selected, onSelect, wide }: {
-  sym: Sym; prices: Record<string, number | undefined>; stats: Stats; selected: Sym; onSelect: (s: Sym) => void; wide: boolean;
+function SymButton({ sym, prices, stats, selected, onSelect, wide, locale }: {
+  sym: Sym; prices: Record<string, number | undefined>; stats: Stats; selected: Sym; onSelect: (s: Sym) => void; wide: boolean; locale: string;
 }) {
   const price = prices[sym] ?? stats[sym]?.price;
   const pct = stats[sym]?.changePct24h ?? 0;
   const isUp = pct >= 0;
   const sel = sym === selected;
   const dec = DECIMALS[sym];
-  const priceStr = price ? `$${price.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })}` : '—';
+  const priceStr = price ? `$${price.toLocaleString(locale, { minimumFractionDigits: dec, maximumFractionDigits: dec })}` : '—';
   const pctStr = pct !== 0 ? `${isUp ? '+' : ''}${pct.toFixed(1)}%` : null;
 
   if (!wide) {

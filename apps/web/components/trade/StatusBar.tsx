@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 
 interface PlatformStats {
   agentCount: number;
@@ -16,6 +17,7 @@ function fmt(n: number): string {
 }
 
 export function StatusBar() {
+  const { t } = useI18n();
   const { token, user } = useAuthStore();
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [pnl, setPnl] = useState<{ totalValue: number; totalPnlPct: number } | null>(null);
@@ -42,17 +44,17 @@ export function StatusBar() {
     <div className="flex items-center h-7 px-3 border-b border-border/40 glass-panel text-[10px] shrink-0 gap-4">
       <div className="flex items-center gap-1.5">
         <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF] animate-pulse glow-sm-cyan" />
-        <span className="text-[#00F0FF]/70 font-medium">LIVE</span>
-        {stats && <span className="text-slate-400 tabular-nums">{stats.agentCount} agents</span>}
+        <span className="text-[#00F0FF]/70 font-medium">{t('LIVE')}</span>
+        {stats && <span className="text-slate-400 tabular-nums">{stats.agentCount} {t('agents')}</span>}
       </div>
       <span className="text-slate-600">|</span>
-      <span className="text-slate-500">Vol <span className="text-slate-300 tabular-nums">${stats ? fmt(stats.totalVolume) : '—'}</span></span>
-      <span className="text-slate-500">Trades <span className="text-slate-300 tabular-nums">{stats ? fmt(stats.totalTrades) : '—'}</span></span>
+      <span className="text-slate-500">{t('Vol')} <span className="text-slate-300 tabular-nums">${stats ? fmt(stats.totalVolume) : '—'}</span></span>
+      <span className="text-slate-500">{t('Trades')} <span className="text-slate-300 tabular-nums">{stats ? fmt(stats.totalTrades) : '—'}</span></span>
       <div className="flex-1" />
       {token && user && pnl && (
         <div className="flex items-center gap-3">
           <span className="text-[#1E6FFF] font-medium">{user.displayName || user.name}</span>
-          <span className="text-slate-500">Equity <span className="text-slate-200 tabular-nums">${fmt(pnl.totalValue)}</span></span>
+          <span className="text-slate-500">{t('Equity')} <span className="text-slate-200 tabular-nums">${fmt(pnl.totalValue)}</span></span>
           <span className={`tabular-nums font-medium ${pnl.totalPnlPct >= 0 ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
             {pnl.totalPnlPct >= 0 ? '+' : ''}{pnl.totalPnlPct.toFixed(2)}%
           </span>

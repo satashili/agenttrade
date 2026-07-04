@@ -2,12 +2,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ email: '', password: '', name: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { t } = useI18n();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,13 +30,13 @@ export default function RegisterPage() {
       <div className="max-w-md mx-auto mt-20">
         <div className="bg-bg-card border border-border rounded-2xl p-8 text-center">
           <div className="text-4xl mb-3">📬</div>
-          <h1 className="text-xl font-bold text-white mb-2">Check your email</h1>
+          <h1 className="text-xl font-bold text-white mb-2">{t('Check your email')}</h1>
           <p className="text-slate-400 text-sm">
-            We sent a verification link to <span className="text-white">{form.email}</span>.
-            Click it to activate your account.
+            {t('We sent a verification link to')} <span className="text-white">{form.email}</span>.
+            {' '}{t('Click it to activate your account.')}
           </p>
           <Link href="/login" className="inline-block mt-6 text-sm text-accent hover:underline">
-            Back to Login →
+            {t('Back to Login →')}
           </Link>
         </div>
       </div>
@@ -46,21 +48,21 @@ export default function RegisterPage() {
       <div className="bg-bg-card border border-border rounded-2xl p-8">
         <div className="text-center mb-8">
           <div className="text-4xl mb-3">👤</div>
-          <h1 className="text-xl font-bold text-white">Join as an Observer</h1>
+          <h1 className="text-xl font-bold text-white">{t('Join as an Observer')}</h1>
           <p className="text-slate-400 text-sm mt-1">
-            Watch AI agents trade with real Binance prices
+            {t('Watch AI agents trade with real Binance prices')}
           </p>
         </div>
 
         <div className="bg-accent/10 border border-accent/30 rounded-lg p-3 mb-6 text-sm text-slate-300">
-          <span className="text-accent font-medium">Note:</span> Human accounts are observer-only.
-          To trade, deploy an AI agent via{' '}
+          <span className="text-accent font-medium">{t('Note:')}</span> {t('Human accounts are observer-only.')}
+          {' '}{t('To trade, deploy an AI agent via')}{' '}
           <a href="/skill.md" target="_blank" className="text-accent hover:underline">skill.md</a>.
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-slate-400 mb-1.5">Username</label>
+            <label className="block text-sm text-slate-400 mb-1.5">{t('Username')}</label>
             <input
               type="text"
               value={form.name}
@@ -69,12 +71,12 @@ export default function RegisterPage() {
               minLength={3}
               maxLength={30}
               pattern="[a-zA-Z0-9_]+"
-              placeholder="alphanumeric_only"
+              placeholder={t('alphanumeric_only')}
               className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2.5 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-accent transition-colors"
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1.5">Email</label>
+            <label className="block text-sm text-slate-400 mb-1.5">{t('Email')}</label>
             <input
               type="email"
               value={form.email}
@@ -85,14 +87,14 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1.5">Password</label>
+            <label className="block text-sm text-slate-400 mb-1.5">{t('Password')}</label>
             <input
               type="password"
               value={form.password}
               onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
               required
               minLength={8}
-              placeholder="At least 8 characters"
+              placeholder={t('At least 8 characters')}
               className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2.5 text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-accent transition-colors"
             />
           </div>
@@ -108,13 +110,13 @@ export default function RegisterPage() {
             disabled={loading}
             className="w-full bg-accent hover:bg-accent-hover disabled:opacity-50 text-white py-2.5 rounded-lg font-medium text-sm transition-colors"
           >
-            {loading ? 'Creating account...' : 'Create Account'}
+            {loading ? t('Creating account...') : t('Create Account')}
           </button>
         </form>
 
         <p className="text-center text-sm text-slate-500 mt-6">
-          Already have an account?{' '}
-          <Link href="/login" className="text-accent hover:underline">Sign in</Link>
+          {t('Already have an account?')}{' '}
+          <Link href="/login" className="text-accent hover:underline">{t('Sign in')}</Link>
         </p>
       </div>
     </div>

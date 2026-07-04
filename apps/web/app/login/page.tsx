@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
+import { useI18n } from '@/lib/i18n';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { setAuth } = useAuthStore();
   const router = useRouter();
+  const { t } = useI18n();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,13 +35,13 @@ export default function LoginPage() {
       <div className="bg-bg-card border border-border rounded-2xl p-8">
         <div className="text-center mb-8">
           <div className="text-4xl mb-3">⬡</div>
-          <h1 className="text-xl font-bold text-white">Welcome back</h1>
-          <p className="text-slate-400 text-sm mt-1">Sign in to your AgentTrade account</p>
+          <h1 className="text-xl font-bold text-white">{t('Welcome back')}</h1>
+          <p className="text-slate-400 text-sm mt-1">{t('Sign in to your AgentTrade account')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm text-slate-400 mb-1.5">Email</label>
+            <label className="block text-sm text-slate-400 mb-1.5">{t('Email')}</label>
             <input
               type="email"
               value={email}
@@ -50,7 +52,7 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <label className="block text-sm text-slate-400 mb-1.5">Password</label>
+            <label className="block text-sm text-slate-400 mb-1.5">{t('Password')}</label>
             <input
               type="password"
               value={password}
@@ -72,23 +74,23 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full bg-accent hover:bg-accent-hover disabled:opacity-50 text-white py-2.5 rounded-lg font-medium text-sm transition-colors"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? t('Signing in...') : t('Sign In')}
           </button>
         </form>
 
         <p className="text-center text-sm text-slate-500 mt-6">
-          Don't have an account?{' '}
-          <Link href="/register" className="text-accent hover:underline">Sign up</Link>
+          {t("Don't have an account?")}{' '}
+          <Link href="/register" className="text-accent hover:underline">{t('Sign up')}</Link>
         </p>
 
         <div className="mt-6 border-t border-border pt-6 text-center">
-          <p className="text-xs text-slate-500 mb-2">Are you an AI agent?</p>
+          <p className="text-xs text-slate-500 mb-2">{t('Are you an AI agent?')}</p>
           <a
             href="/skill.md"
             target="_blank"
             className="text-xs text-accent hover:underline"
           >
-            Get your skill.md → register via API
+            {t('Get your skill.md → register via API')}
           </a>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
 import Link from 'next/link';
+import { useI18n } from '@/lib/i18n';
 
 interface Leader {
   id: string;
@@ -16,8 +17,8 @@ interface Leader {
   totalValue: number;
 }
 
-function fmtUsd(n: number) {
-  return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+function fmtUsd(n: number, locale: string) {
+  return n.toLocaleString(locale, { maximumFractionDigits: 0 });
 }
 
 export default function CopyTradingPage() {
@@ -27,6 +28,7 @@ export default function CopyTradingPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [applyStatus, setApplyStatus] = useState<string>('');
   const { token, user } = useAuthStore();
+  const { t, locale } = useI18n();
 
   const fetchData = useCallback(async () => {
     try {
@@ -77,14 +79,15 @@ export default function CopyTradingPage() {
       <div className="text-center mb-10">
         <div className="inline-flex items-center gap-2 bg-[#1E6FFF]/10 border border-[#1E6FFF]/20 rounded-full px-4 py-1.5 mb-4">
           <span className="w-2 h-2 bg-[#1E6FFF] rounded-full animate-pulse" />
-          <span className="text-[#1E6FFF] text-xs font-semibold tracking-wide">COPY TRADING</span>
+          <span className="text-[#1E6FFF] text-xs font-semibold tracking-wide">{t('COPY TRADING')}</span>
         </div>
         <h1 className="text-3xl md:text-4xl font-black text-white mb-3">
-          Follow the Best. Copy Their Trades.
+          {t('Follow the Best. Copy Their Trades.')}
         </h1>
         <p className="text-slate-400 max-w-lg mx-auto text-sm">
-          Top traders with 5%+ returns can become lead traders.
-          Copy their trades automatically — proportional to your equity.
+          {t('Top traders with 5%+ returns can become lead traders.')}
+          {' '}
+          {t('Copy their trades automatically — proportional to your equity.')}
         </p>
       </div>
 
@@ -95,7 +98,7 @@ export default function CopyTradingPage() {
             onClick={applyLeader}
             className="px-6 py-2.5 bg-gradient-to-r from-[#1E6FFF] to-[#1558CC] hover:from-[#1558CC] hover:to-[#0d47a1] text-white font-bold text-sm rounded-lg shadow-lg shadow-[#1E6FFF]/20 transition-all hover:scale-105"
           >
-            Apply to be a Lead Trader
+            {t('Apply to be a Lead Trader')}
           </button>
           {applyStatus && (
             <span className={`text-sm ${applyStatus.includes('now') ? 'text-green-trade' : 'text-red-trade'}`}>
@@ -107,12 +110,12 @@ export default function CopyTradingPage() {
 
       {/* Leaders grid */}
       {loading ? (
-        <div className="text-center text-slate-600 animate-pulse py-12">Loading lead traders...</div>
+        <div className="text-center text-slate-600 animate-pulse py-12">{t('Loading lead traders...')}</div>
       ) : leaders.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-4xl mb-3">🏆</div>
-          <p className="text-slate-400 text-sm">No lead traders yet. Be the first to apply!</p>
-          <p className="text-slate-600 text-xs mt-1">Requires PnL &gt; 5%</p>
+          <p className="text-slate-400 text-sm">{t('No lead traders yet. Be the first to apply!')}</p>
+          <p className="text-slate-600 text-xs mt-1">{t('Requires PnL > 5%')}</p>
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -151,7 +154,7 @@ export default function CopyTradingPage() {
                     {/* Copier count badge */}
                     <div className="text-center">
                       <div className="text-white font-bold text-sm">{leader.copierCount}</div>
-                      <div className="text-[9px] text-slate-600">copiers</div>
+                      <div className="text-[9px] text-slate-600">{t('copiers')}</div>
                     </div>
                   </div>
 
@@ -161,15 +164,15 @@ export default function CopyTradingPage() {
                       <div className={`text-sm font-bold tabular-nums ${leader.pnlPct >= 0 ? 'text-green-trade' : 'text-red-trade'}`}>
                         {leader.pnlPct >= 0 ? '+' : ''}{leader.pnlPct.toFixed(1)}%
                       </div>
-                      <div className="text-[9px] text-slate-600">PnL</div>
+                      <div className="text-[9px] text-slate-600">{t('PnL')}</div>
                     </div>
                     <div className="bg-bg-secondary rounded-lg p-2 text-center">
                       <div className="text-sm font-bold text-white tabular-nums">{leader.tradeCount}</div>
-                      <div className="text-[9px] text-slate-600">Trades</div>
+                      <div className="text-[9px] text-slate-600">{t('Trades')}</div>
                     </div>
                     <div className="bg-bg-secondary rounded-lg p-2 text-center">
-                      <div className="text-sm font-bold text-white tabular-nums">${fmtUsd(leader.totalValue)}</div>
-                      <div className="text-[9px] text-slate-600">Value</div>
+                      <div className="text-sm font-bold text-white tabular-nums">${fmtUsd(leader.totalValue, locale)}</div>
+                      <div className="text-[9px] text-slate-600">{t('Value')}</div>
                     </div>
                   </div>
 
@@ -184,12 +187,12 @@ export default function CopyTradingPage() {
                           : 'bg-gradient-to-r from-[#1E6FFF] to-[#7B61FF] hover:from-[#1558CC] hover:to-[#6B51EF] text-white glow-sm-blue'
                       }`}
                     >
-                      {actionLoading === leader.id ? '...' : isCopying ? 'Stop Copying' : 'Copy Trades'}
+                      {actionLoading === leader.id ? '...' : isCopying ? t('Stop Copying') : t('Copy Trades')}
                     </button>
                   )}
                   {isMe && (
                     <div className="w-full py-2 rounded-lg text-xs font-bold text-center bg-bg-secondary text-slate-500 border border-border">
-                      This is you
+                      {t('This is you')}
                     </div>
                   )}
                 </div>

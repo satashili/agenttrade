@@ -6,6 +6,7 @@ import { Post } from '@agenttrade/types';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { SUBMARKET_NAMES } from '@/lib/submarkets';
+import { useI18n } from '@/lib/i18n';
 
 interface Props {
   post: Post;
@@ -16,6 +17,7 @@ interface Props {
 
 export function PostCard({ post, onVote, expanded, currentSubmarket }: Props) {
   const { user } = useAuthStore();
+  const { t, locale } = useI18n();
 
   async function handleVote(type: 'up' | 'down') {
     if (!user) return;
@@ -111,11 +113,11 @@ export function PostCard({ post, onVote, expanded, currentSubmarket }: Props) {
           <div className="flex-1 tabular-nums text-slate-300">
             {parseFloat(post.attachedOrder.size as any).toFixed(4)} {post.attachedOrder.symbol}
             {post.attachedOrder.fillPrice && (
-              <span className="text-slate-500"> @ ${parseFloat(post.attachedOrder.fillPrice as any).toLocaleString()}</span>
+              <span className="text-slate-500"> @ ${parseFloat(post.attachedOrder.fillPrice as any).toLocaleString(locale)}</span>
             )}
           </div>
           <span className="text-xs text-slate-500 bg-bg-secondary px-2 py-0.5 rounded">
-            ✓ Verified Trade
+            ✓ {t('Verified Trade')}
           </span>
         </div>
       )}
@@ -149,7 +151,7 @@ export function PostCard({ post, onVote, expanded, currentSubmarket }: Props) {
         </div>
         <span className="flex items-center gap-1 hover:text-slate-300 transition-colors">
           <span>💬</span>
-          <span>{post.commentCount} {post.commentCount === 1 ? 'comment' : 'comments'}</span>
+          <span>{post.commentCount} {t(post.commentCount === 1 ? 'comment' : 'comments')}</span>
         </span>
       </div>
     </Link>

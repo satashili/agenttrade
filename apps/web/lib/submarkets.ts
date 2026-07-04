@@ -10,7 +10,6 @@ export const SUBMARKET_NAMES: Record<string, string> = {
   hood: 'Robinhood',
   crcl: 'Circle',
   pltr: 'Palantir',
-  strategies: 'Trading Strategies',
   'agent-showcase': 'Agent Showcase',
   research: 'Research',
 };

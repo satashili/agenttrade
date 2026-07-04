@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import Link from 'next/link';
+import { useI18n } from '@/lib/i18n';
 
 interface AgentData {
   name: string;
@@ -26,6 +27,7 @@ interface AgentOption {
 }
 
 export default function ComparePage() {
+  const { t, locale } = useI18n();
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [nameA, setNameA] = useState('');
   const [nameB, setNameB] = useState('');
@@ -51,11 +53,11 @@ export default function ComparePage() {
 
   const compare = useCallback(async () => {
     if (!nameA || !nameB) {
-      setError('Select two agents to compare');
+      setError(t('Select two agents to compare'));
       return;
     }
     if (nameA === nameB) {
-      setError('Select two different agents');
+      setError(t('Select two different agents'));
       return;
     }
     setLoading(true);
@@ -64,39 +66,39 @@ export default function ComparePage() {
       const data = await api.get<CompareResult>(`/api/v1/users/compare?a=${encodeURIComponent(nameA)}&b=${encodeURIComponent(nameB)}`);
       setResult(data);
     } catch (err: any) {
-      setError(err.message || 'Failed to compare');
+      setError(err.message || t('Failed to compare'));
       setResult(null);
     } finally {
       setLoading(false);
     }
-  }, [nameA, nameB]);
+  }, [nameA, nameB, t]);
 
   function StatRow({ label, valA, valB, format }: { label: string; valA: number; valB: number; format: (v: number) => string }) {
     return (
       <div className="grid grid-cols-3 gap-4 py-2 border-b border-border/40">
         <div className="text-right tabular-nums text-sm text-white">{format(valA)}</div>
-        <div className="text-center text-xs text-slate-400 self-center">{label}</div>
+        <div className="text-center text-xs text-slate-400 self-center">{t(label)}</div>
         <div className="text-left tabular-nums text-sm text-white">{format(valB)}</div>
       </div>
     );
   }
 
-  const fmtDollar = (v: number) => `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtDollar = (v: number) => `$${v.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtPct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
-  const fmtNum = (v: number) => v.toLocaleString();
+  const fmtNum = (v: number) => v.toLocaleString(locale);
 
   return (
     <div className="min-h-screen bg-bg text-slate-200 flex flex-col items-center py-8 px-4">
-      <h1 className="text-xl font-bold text-white mb-6">Compare Agents</h1>
+      <h1 className="text-xl font-bold text-white mb-6">{t('Compare Agents')}</h1>
 
       {/* Selection */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
         <select
           value={nameA}
           onChange={(e) => setNameA(e.target.value)}
           className="bg-bg-card border border-border rounded px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
         >
-          <option value="">Select Agent A</option>
+          <option value="">{t('Select Agent A')}</option>
           {agents.map((a) => (
             <option key={a.name} value={a.name}>
               {a.displayName || a.name}
@@ -104,14 +106,14 @@ export default function ComparePage() {
           ))}
         </select>
 
-        <span className="text-slate-500 text-sm font-bold">vs</span>
+        <span className="text-slate-500 text-sm font-bold">{t('vs')}</span>
 
         <select
           value={nameB}
           onChange={(e) => setNameB(e.target.value)}
           className="bg-bg-card border border-border rounded px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
         >
-          <option value="">Select Agent B</option>
+          <option value="">{t('Select Agent B')}</option>
           {agents.map((a) => (
             <option key={a.name} value={a.name}>
               {a.displayName || a.name}
@@ -124,7 +126,7 @@ export default function ComparePage() {
           disabled={loading}
           className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-500 transition-colors disabled:opacity-50"
         >
-          {loading ? 'Loading...' : 'Compare'}
+          {loading ? t('Loading...') : t('Compare')}
         </button>
       </div>
 
@@ -140,7 +142,7 @@ export default function ComparePage() {
                 {result.a.displayName || result.a.name}
               </Link>
             </div>
-            <div className="text-center text-xs text-slate-500">Metric</div>
+            <div className="text-center text-xs text-slate-500">{t('Metric')}</div>
             <div className="text-left">
               <Link href={`/u/${result.b.name}`} className="text-blue-400 hover:underline font-semibold text-sm">
                 {result.b.displayName || result.b.name}

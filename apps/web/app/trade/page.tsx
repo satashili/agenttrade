@@ -11,13 +11,18 @@ import { StatusBar } from '@/components/trade/StatusBar';
 import { NewsTicker } from '@/components/trade/NewsTicker';
 import { MarketStats } from '@/components/trade/MarketStats';
 import { ResizeHandle } from '@/components/trade/ResizeHandle';
+import { useI18n } from '@/lib/i18n';
 
 type Sym = 'BTC' | 'ETH' | 'TSLA' | 'AMZN' | 'COIN' | 'MSTR' | 'INTC' | 'HOOD' | 'CRCL' | 'PLTR';
 type RightTab = 'orderbook' | 'stats';
+type MobileTab = 'chart' | 'trade' | 'activity' | 'stats';
 
 export default function TradePage() {
   const [symbol, setSymbol] = useState<Sym>('TSLA');
   const [rightTab, setRightTab] = useState<RightTab>('orderbook');
+  const [mobileTab, setMobileTab] = useState<MobileTab>('chart');
+  const [isMobile, setIsMobile] = useState(false);
+  const { t } = useI18n();
   const [leftWidth, setLeftWidth] = useState(() => {
     if (typeof window === 'undefined') return 150;
     return Number(localStorage.getItem('trade:leftWidth')) || 150;
@@ -34,6 +39,12 @@ export default function TradePage() {
   useEffect(() => { localStorage.setItem('trade:leftWidth', String(leftWidth)); }, [leftWidth]);
   useEffect(() => { localStorage.setItem('trade:rightWidth', String(rightWidth)); }, [rightWidth]);
   useEffect(() => { localStorage.setItem('trade:bottomHeight', String(bottomHeight)); }, [bottomHeight]);
+  useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth < 768);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   const onResizeLeft = useCallback((delta: number) => {
     setLeftWidth(w => Math.max(48, Math.min(260, w + delta)));
@@ -46,6 +57,74 @@ export default function TradePage() {
   const onResizeBottom = useCallback((delta: number) => {
     setBottomHeight(h => Math.max(100, Math.min(600, h - delta)));
   }, []);
+
+  if (isMobile) {
+    return (
+      <div className="h-full flex flex-col bg-bg text-slate-200 overflow-hidden">
+        <StatusBar />
+        <NewsTicker />
+        <TickerBar symbol={symbol} />
+
+        <div className="shrink-0 border-b border-border bg-[#0B0E11]">
+          <div className="overflow-x-auto">
+            <div className="flex min-w-max gap-1 px-2 py-2">
+              {(['TSLA', 'AMZN', 'COIN', 'MSTR', 'INTC', 'HOOD', 'CRCL', 'PLTR', 'BTC', 'ETH'] as Sym[]).map((sym) => (
+                <button
+                  key={sym}
+                  onClick={() => setSymbol(sym)}
+                  className={`h-8 rounded px-3 text-xs font-bold transition-colors ${
+                    symbol === sym ? 'bg-[#1E6FFF] text-white' : 'bg-bg-secondary text-slate-400'
+                  }`}
+                >
+                  {sym}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 border-t border-border/60 text-xs font-semibold">
+            {([
+              ['chart', t('Chart')],
+              ['trade', t('Trade')],
+              ['activity', t('Activity')],
+              ['stats', t('Stats')],
+            ] as Array<[MobileTab, string]>).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setMobileTab(key)}
+                className={`py-2 transition-colors ${
+                  mobileTab === key
+                    ? 'border-b-2 border-[#1E6FFF] text-white'
+                    : 'text-slate-500'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {mobileTab === 'chart' && (
+            <div className="h-full min-h-[420px]">
+              <CandleChart symbol={symbol} />
+            </div>
+          )}
+          {mobileTab === 'trade' && (
+            <div className="grid gap-0">
+              <OrderBook symbol={symbol} />
+              <OrderForm symbol={symbol} />
+              <RecentTrades symbol={symbol} />
+            </div>
+          )}
+          {mobileTab === 'activity' && (
+            <BottomPanel symbol={symbol} height={520} />
+          )}
+          {mobileTab === 'stats' && <MarketStats />}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-bg text-slate-200 overflow-hidden" style={{ overscrollBehaviorX: 'none', touchAction: 'pan-y' }}>
@@ -80,8 +159,8 @@ export default function TradePage() {
           {/* Tab headers */}
           <div className="flex border-b border-border shrink-0 bg-bg-secondary">
             {([
-              { key: 'orderbook', label: 'Book' },
-              { key: 'stats', label: 'Stats' },
+              { key: 'orderbook', label: t('Book') },
+              { key: 'stats', label: t('Stats') },
             ] as const).map((tab) => (
               <button
                 key={tab.key}

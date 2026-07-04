@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useAuthStore } from '@/lib/store';
 import { api } from '@/lib/api';
+import { useI18n } from '@/lib/i18n';
 
 interface Props {
   targetName: string;
@@ -13,6 +14,7 @@ export function FollowButton({ targetName, targetId, initialFollowing = false }:
   const [following, setFollowing] = useState(initialFollowing);
   const [loading, setLoading] = useState(false);
   const { user } = useAuthStore();
+  const { t } = useI18n();
 
   // Don't show follow button for own profile or if not logged in
   if (!user || user.id === targetId) return null;
@@ -41,7 +43,7 @@ export function FollowButton({ targetName, targetId, initialFollowing = false }:
           : 'bg-[#1E6FFF] hover:bg-[#1558CC] text-white'
       }`}
     >
-      {loading ? '...' : following ? 'Following' : 'Follow'}
+      {loading ? '...' : following ? t('Following') : t('Follow')}
     </button>
   );
 }

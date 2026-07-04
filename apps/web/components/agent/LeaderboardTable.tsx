@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import clsx from 'clsx';
 import { LeaderboardEntry } from '@agenttrade/types';
+import { useI18n } from '@/lib/i18n';
 
 const MODEL_BADGES: Record<string, string> = {
   'gpt-4o': 'bg-green-900/50 text-green-400',
@@ -9,19 +10,26 @@ const MODEL_BADGES: Record<string, string> = {
   'gemini-2.0-flash': 'bg-blue-900/50 text-blue-400',
 };
 
+function formatPnlPct(value: number) {
+  const abs = Math.abs(value);
+  const digits = abs > 1 ? 2 : abs > 0.01 ? 3 : 4;
+  return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}%`;
+}
+
 export function LeaderboardTable({ entries, compact = false }: { entries: LeaderboardEntry[]; compact?: boolean }) {
   const rows = compact ? entries.slice(0, 5) : entries;
+  const { t, locale } = useI18n();
 
   return (
     <div className="space-y-2 max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex items-center px-4 py-2 text-xs text-slate-500 uppercase">
         <span className="w-8 shrink-0">#</span>
-        <span className="flex-1">Agent</span>
-        {!compact && <span className="w-28 text-right">Total Value</span>}
-        <span className="w-20 text-right">PnL</span>
-        {!compact && <span className="w-16 text-right">Trades</span>}
-        {!compact && <span className="w-16 text-right">Karma</span>}
+        <span className="flex-1">{t('Agent')}</span>
+        {!compact && <span className="w-28 text-right">{t('Total Value')}</span>}
+        <span className="w-20 text-right">{t('PnL')}</span>
+        {!compact && <span className="w-16 text-right">{t('Trades')}</span>}
+        {!compact && <span className="w-16 text-right">{t('Karma')}</span>}
       </div>
 
       {/* Rows */}
@@ -71,13 +79,13 @@ export function LeaderboardTable({ entries, compact = false }: { entries: Leader
             {/* Total Value (normalized to $100k start) */}
             {!compact && (
               <span className="w-28 text-right text-sm tabular-nums text-white">
-                ${(100000 * (1 + entry.totalPnlPct / 100)).toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                ${(100000 * (1 + entry.totalPnlPct / 100)).toLocaleString(locale, { maximumFractionDigits: 0 })}
               </span>
             )}
 
             {/* PnL */}
             <span className={clsx('w-20 text-right text-sm tabular-nums font-medium', isUp ? 'text-green-trade' : 'text-red-trade')}>
-              {isUp ? '+' : ''}{entry.totalPnlPct.toFixed(2)}%
+              {formatPnlPct(entry.totalPnlPct)}
             </span>
 
             {/* Trades */}

@@ -3,6 +3,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore, useChatStore } from '@/lib/store';
 import { getSocket } from '@/lib/socket';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useI18n } from '@/lib/i18n';
 
 function fmtTime(ts: number) {
   return new Date(ts).toLocaleTimeString('en-US', {
@@ -15,8 +17,11 @@ function fmtTime(ts: number) {
 type PanelSize = 'normal' | 'expanded';
 
 export function GlobalChat() {
+  const pathname = usePathname();
+  const hiddenOnAiAgents = pathname?.startsWith('/ai-agents');
   const { messages, unreadCount, isOpen, onlineCount, loaded, toggle, markRead, setOpen } = useChatStore();
   const user = useAuthStore((s) => s.user);
+  const { t } = useI18n();
   const [input, setInput] = useState('');
   const [isMinimized, setIsMinimized] = useState(false);
   const [panelSize, setPanelSize] = useState<PanelSize>('normal');
@@ -127,6 +132,10 @@ export function GlobalChat() {
     ? { w: 420, h: 560 }
     : { w: 340, h: 400 };
 
+  if (hiddenOnAiAgents) {
+    return null;
+  }
+
   // ─── Mobile Layout ─────────────────────────────────────────────────────────
   if (isMobile) {
     return (
@@ -136,7 +145,7 @@ export function GlobalChat() {
           <button
             onClick={toggle}
             className="fixed bottom-5 right-4 z-[9999] w-12 h-12 rounded-full bg-[#1E6FFF] hover:bg-[#1558CC] active:bg-[#1558CC] text-white flex items-center justify-center shadow-lg shadow-[#1E6FFF]/30 transition-all active:scale-95"
-            aria-label="Open chat"
+            aria-label={t('Open chat')}
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -168,14 +177,14 @@ export function GlobalChat() {
                   <span className="absolute inset-0 w-2 h-2 bg-[#0ECB81] rounded-full" />
                   <span className="absolute inset-0 w-2 h-2 bg-[#0ECB81] rounded-full animate-ping opacity-30" />
                 </div>
-                <span className="text-[11px] font-bold text-white/80 tracking-widest">LIVE CHAT</span>
-                <span className="text-[10px] text-slate-500 tabular-nums">{onlineCount} online</span>
+                <span className="text-[11px] font-bold text-white/80 tracking-widest">{t('LIVE CHAT')}</span>
+                <span className="text-[10px] text-slate-500 tabular-nums">{onlineCount} {t('online')}</span>
               </div>
               {/* Collapse button in header — no overlap with input */}
               <button
                 onClick={toggle}
                 className="w-7 h-7 flex items-center justify-center rounded-lg bg-[#1E6FFF]/10 hover:bg-[#1E6FFF]/20 active:bg-[#1E6FFF]/30 text-white/60 hover:text-white transition-colors"
-                aria-label="Collapse chat"
+                aria-label={t('Collapse chat')}
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -192,12 +201,12 @@ export function GlobalChat() {
             >
               {!loaded && (
                 <div className="flex items-center justify-center h-full">
-                  <div className="text-slate-600 text-xs animate-pulse">Connecting...</div>
+                  <div className="text-slate-600 text-xs animate-pulse">{t('Connecting...')}</div>
                 </div>
               )}
               {loaded && messages.length === 0 && (
                 <div className="flex items-center justify-center h-full">
-                  <div className="text-slate-700 text-[11px]">Waiting for activity...</div>
+                  <div className="text-slate-700 text-[11px]">{t('Waiting for activity...')}</div>
                 </div>
               )}
               {messages.map((msg, i) => (
@@ -216,7 +225,7 @@ export function GlobalChat() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Say something..."
+                    placeholder={t('Say something...')}
                     maxLength={500}
                     enterKeyHint="send"
                     className="flex-1 bg-[#12161c] border border-border/50 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-600 outline-none transition-all focus:border-[#1E6FFF]/40 focus:shadow-[0_0_6px_rgba(30,111,255,0.1)]"
@@ -235,7 +244,7 @@ export function GlobalChat() {
             ) : (
               <div className="px-4 py-3 border-t border-border/40 bg-[#0B0E11] text-center shrink-0">
                 <Link href="/login" className="text-sm text-[#1E6FFF] hover:text-white transition-colors font-medium">
-                  Log in to chat
+                  {t('Log in to chat')}
                 </Link>
               </div>
             )}
@@ -303,8 +312,8 @@ export function GlobalChat() {
               <span className="absolute inset-0 w-2 h-2 bg-[#0ECB81] rounded-full" />
               <span className="absolute inset-0 w-2 h-2 bg-[#0ECB81] rounded-full animate-ping opacity-30" />
             </div>
-            <span className="text-[10px] font-bold text-white/80 tracking-widest">LIVE CHAT</span>
-            <span className="text-[9px] text-slate-600 tabular-nums">{onlineCount} online</span>
+            <span className="text-[10px] font-bold text-white/80 tracking-widest">{t('LIVE CHAT')}</span>
+            <span className="text-[9px] text-slate-600 tabular-nums">{onlineCount} {t('online')}</span>
             {isMinimized && unreadCount > 0 && (
               <span className="px-1.5 py-0.5 bg-red-500 text-white text-[8px] rounded-full font-bold leading-none">
                 {unreadCount > 99 ? '99+' : unreadCount}
@@ -316,7 +325,7 @@ export function GlobalChat() {
             <button
               onClick={() => setIsMinimized(!isMinimized)}
               className="w-5 h-5 flex items-center justify-center text-slate-600 hover:text-white rounded transition-colors"
-              title={isMinimized ? 'Expand' : 'Minimize'}
+              title={isMinimized ? t('Expand') : t('Minimize')}
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" d="M20 12H4" />
@@ -327,7 +336,7 @@ export function GlobalChat() {
               <button
                 onClick={() => setPanelSize(panelSize === 'normal' ? 'expanded' : 'normal')}
                 className="w-5 h-5 flex items-center justify-center text-slate-600 hover:text-white rounded transition-colors"
-                title={panelSize === 'normal' ? 'Expand' : 'Shrink'}
+                title={panelSize === 'normal' ? t('Expand') : t('Shrink')}
               >
                 <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -338,7 +347,7 @@ export function GlobalChat() {
             <button
               onClick={toggle}
               className="w-5 h-5 flex items-center justify-center text-slate-600 hover:text-red-400 rounded transition-colors"
-              title="Close"
+              title={t('Close')}
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" d="M18 6L6 18M6 6l12 12" />
@@ -358,12 +367,12 @@ export function GlobalChat() {
             >
               {!loaded && (
                 <div className="flex items-center justify-center h-full">
-                  <div className="text-slate-600 text-xs animate-pulse">Connecting...</div>
+                  <div className="text-slate-600 text-xs animate-pulse">{t('Connecting...')}</div>
                 </div>
               )}
               {loaded && messages.length === 0 && (
                 <div className="flex items-center justify-center h-full">
-                  <div className="text-slate-700 text-[10px]">Waiting for activity...</div>
+                  <div className="text-slate-700 text-[10px]">{t('Waiting for activity...')}</div>
                 </div>
               )}
               {messages.map((msg, i) => (
@@ -382,7 +391,7 @@ export function GlobalChat() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Say something..."
+                    placeholder={t('Say something...')}
                     maxLength={500}
                     className="flex-1 bg-[#12161c] border border-border/50 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-600 outline-none transition-all focus:border-[#1E6FFF]/40 focus:shadow-[0_0_6px_rgba(30,111,255,0.1)]"
                   />
@@ -400,7 +409,7 @@ export function GlobalChat() {
             ) : (
               <div className="px-3 py-2.5 border-t border-border/40 bg-[#0B0E11] text-center shrink-0">
                 <Link href="/login" className="text-[10px] text-[#1E6FFF] hover:text-white transition-colors font-medium">
-                  Log in to chat
+                  {t('Log in to chat')}
                 </Link>
               </div>
             )}

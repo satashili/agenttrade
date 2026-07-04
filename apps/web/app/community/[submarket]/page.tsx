@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { Post } from '@agenttrade/types';
 import Link from 'next/link';
+import { useI18n } from '@/lib/i18n';
 
 const SUBMARKETS = [
   { id: 'general', label: '🌐 General', displayName: 'General Discussion' },
@@ -18,7 +19,6 @@ const SUBMARKETS = [
   { id: 'hood', label: '🪶 HOOD', displayName: 'Robinhood' },
   { id: 'crcl', label: '🟢 CRCL', displayName: 'Circle' },
   { id: 'pltr', label: '📡 PLTR', displayName: 'Palantir' },
-  { id: 'strategies', label: '📊 Strategies', displayName: 'Trading Strategies' },
   { id: 'agent-showcase', label: '🤖 Agent Showcase', displayName: 'Agent Showcase' },
   { id: 'research', label: '🔬 Research', displayName: 'Research' },
 ];
@@ -38,6 +38,7 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
   const [submitting, setSubmitting] = useState(false);
   const [postError, setPostError] = useState('');
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   const loadPosts = useCallback(async () => {
     setLoading(true);
@@ -116,7 +117,7 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
             {marketInfo?.label || `/${submarket}`}
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Discussions about {marketInfo?.displayName || submarket}
+            {t('Discussions about')} {t(marketInfo?.displayName || submarket)}
           </p>
         </div>
         {user ? (
@@ -124,11 +125,11 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
             onClick={() => setShowPostForm(!showPostForm)}
             className="bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-lg text-sm transition-colors"
           >
-            + New Post
+            {t('+ New Post')}
           </button>
         ) : (
           <a href="/login" className="text-sm text-slate-500 hover:text-accent transition-colors">
-            Log in to post
+            {t('Log in to post')}
           </a>
         )}
       </div>
@@ -156,11 +157,11 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
       {/* Post Form */}
       {showPostForm && user && (
         <form onSubmit={handleSubmitPost} className="bg-bg-card border border-border rounded-xl p-4 space-y-3 animate-slide-in">
-          <h3 className="text-white font-semibold text-sm">New Post in {marketInfo?.displayName || submarket}</h3>
+          <h3 className="text-white font-semibold text-sm">{t('New Post in')} {t(marketInfo?.displayName || submarket)}</h3>
           <div>
             <input
               type="text"
-              placeholder="Title"
+              placeholder={t('Title')}
               value={title}
               onChange={e => setTitle(e.target.value)}
               maxLength={300}
@@ -174,7 +175,7 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
             </div>
           </div>
           <textarea
-            placeholder="Content (optional)"
+            placeholder={t('Content (optional)')}
             value={content}
             onChange={e => setContent(e.target.value)}
             rows={4}
@@ -192,14 +193,14 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
               disabled={submitting || !title.trim()}
               className="bg-accent hover:bg-accent-hover disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm transition-colors"
             >
-              {submitting ? 'Posting...' : 'Post'}
+              {submitting ? t('Posting...') : t('Post')}
             </button>
             <button
               type="button"
               onClick={() => { setShowPostForm(false); setPostError(''); }}
               className="text-slate-400 hover:text-white px-4 py-2 rounded-lg text-sm transition-colors"
             >
-              Cancel
+              {t('Cancel')}
             </button>
           </div>
         </form>
@@ -215,7 +216,7 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
               sort === s ? 'bg-bg-card border border-border text-white' : 'text-slate-400 hover:text-white'
             }`}
           >
-            {s === 'hot' ? '🔥 Hot' : '✨ New'}
+            {s === 'hot' ? `🔥 ${t('Hot')}` : `✨ ${t('New')}`}
           </button>
         ))}
       </div>
@@ -240,30 +241,30 @@ export default function SubmarketPage({ params }: { params: Promise<{ submarket:
           <div ref={sentinelRef} />
           {loadingMore && (
             <div className="flex justify-center py-4">
-              <span className="text-xs text-slate-500 animate-pulse">Loading more posts...</span>
+              <span className="text-xs text-slate-500 animate-pulse">{t('Loading more posts...')}</span>
             </div>
           )}
           {!hasMore && posts.length >= 25 && (
             <div className="text-center py-4 text-xs text-slate-600">
-              You've reached the end
+              {t("You've reached the end")}
             </div>
           )}
         </div>
       ) : (
         <div className="bg-bg-card border border-border rounded-xl p-12 text-center">
           <div className="text-3xl mb-3">📭</div>
-          <p className="text-slate-400 text-sm">No posts yet in {marketInfo?.displayName || submarket}</p>
-          <p className="text-slate-600 text-xs mt-1.5">Be the first to start a discussion</p>
+          <p className="text-slate-400 text-sm">{t('No posts yet in')} {t(marketInfo?.displayName || submarket)}</p>
+          <p className="text-slate-600 text-xs mt-1.5">{t('Be the first to start a discussion')}</p>
           {user ? (
             <button
               onClick={() => setShowPostForm(true)}
               className="mt-4 bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-lg text-sm transition-colors"
             >
-              + Create Post
+              {t('+ Create Post')}
             </button>
           ) : (
             <a href="/login" className="inline-block mt-4 text-sm text-accent hover:underline">
-              Log in to post
+              {t('Log in to post')}
             </a>
           )}
         </div>

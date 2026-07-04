@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import clsx from 'clsx';
+import { useI18n } from '@/lib/i18n';
 
 interface TradeRecord {
   symbol: string;
@@ -23,21 +24,21 @@ interface TradesResponse {
 }
 
 const ACTION_STYLES: Record<string, { label: string; className: string }> = {
-  open:   { label: 'Open',   className: 'bg-blue-500/20 text-blue-400' },
-  close:  { label: 'Close',  className: 'bg-amber-500/20 text-amber-400' },
-  add:    { label: 'Add',    className: 'bg-slate-500/20 text-slate-400' },
-  reduce: { label: 'Reduce', className: 'bg-orange-500/20 text-orange-400' },
-  flip:   { label: 'Flip',   className: 'bg-purple-500/20 text-purple-400' },
+  open:   { label: 'Open Trade',   className: 'bg-blue-500/20 text-blue-400' },
+  close:  { label: 'Close Trade',  className: 'bg-amber-500/20 text-amber-400' },
+  add:    { label: 'Add Trade',    className: 'bg-slate-500/20 text-slate-400' },
+  reduce: { label: 'Reduce Trade', className: 'bg-orange-500/20 text-orange-400' },
+  flip:   { label: 'Flip Trade',   className: 'bg-purple-500/20 text-purple-400' },
 };
 
-function formatPrice(price: number): string {
+function formatPrice(price: number, locale: string): string {
   return price >= 1000
-    ? `$${price.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+    ? `$${price.toLocaleString(locale, { maximumFractionDigits: 0 })}`
     : `$${price.toFixed(2)}`;
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
+function formatDate(iso: string, locale: string): string {
+  return new Date(iso).toLocaleDateString(locale, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -55,6 +56,7 @@ function formatSize(size: number, symbol: string): string {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 export function TradeHistoryPanel({ name }: { name: string }) {
+  const { t, locale } = useI18n();
   const [trades, setTrades] = useState<TradeRecord[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -102,20 +104,20 @@ export function TradeHistoryPanel({ name }: { name: string }) {
   return (
     <div className="bg-bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Trade History</h3>
+        <h3 className="text-sm font-semibold text-white">{t('Trade History')}</h3>
         {!loading && trades.length > 0 && (
-          <span className="text-xs text-slate-500">{trades.length}{hasMore ? '+' : ''} trades</span>
+          <span className="text-xs text-slate-500">{trades.length.toLocaleString(locale)}{hasMore ? '+' : ''} {t('trades')}</span>
         )}
       </div>
 
       {loading ? (
-        <div className="px-4 py-10 text-center text-slate-500 text-sm">Loading…</div>
+        <div className="px-4 py-10 text-center text-slate-500 text-sm">{t('Loading…')}</div>
       ) : error ? (
-        <div className="px-4 py-10 text-center text-slate-500 text-sm">Failed to load trade history</div>
+        <div className="px-4 py-10 text-center text-slate-500 text-sm">{t('Failed to load trade history')}</div>
       ) : trades.length === 0 ? (
         <div className="px-4 py-10 text-center">
           <div className="text-slate-600 text-2xl mb-2">📭</div>
-          <div className="text-slate-500 text-sm">No trades yet</div>
+          <div className="text-slate-500 text-sm">{t('No trades yet')}</div>
         </div>
       ) : (
         <>
@@ -123,15 +125,9 @@ export function TradeHistoryPanel({ name }: { name: string }) {
             <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="text-slate-400 text-xs uppercase border-b border-border">
-                  <th className="px-4 py-2 text-left font-medium">Time</th>
-                  <th className="px-4 py-2 text-left font-medium">Symbol</th>
-                  <th className="px-4 py-2 text-left font-medium">Side</th>
-                  <th className="px-4 py-2 text-left font-medium">Type</th>
-                  <th className="px-4 py-2 text-right font-medium">Size</th>
-                  <th className="px-4 py-2 text-right font-medium">Price</th>
-                  <th className="px-4 py-2 text-right font-medium">PnL</th>
-                  <th className="px-4 py-2 text-right font-medium">Fee</th>
-                  <th className="px-4 py-2 text-right font-medium">Position</th>
+                  {['Time', 'Symbol', 'Side', 'Type', 'Size', 'Price', 'PnL', 'Fee', 'Position'].map((header) => (
+                    <th key={header} className={clsx('px-4 py-2 font-medium', ['Time', 'Symbol', 'Side', 'Type'].includes(header) ? 'text-left' : 'text-right')}>{t(header)}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -143,7 +139,7 @@ export function TradeHistoryPanel({ name }: { name: string }) {
                   return (
                     <tr key={`${trade.filledAt}-${i}`} className="hover:bg-bg-hover transition-colors">
                       <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">
-                        {formatDate(trade.filledAt)}
+                        {formatDate(trade.filledAt, locale)}
                       </td>
                       <td className="px-4 py-3 font-medium text-white">{trade.symbol}</td>
                       <td className="px-4 py-3">
@@ -151,7 +147,7 @@ export function TradeHistoryPanel({ name }: { name: string }) {
                           'text-xs font-semibold',
                           isBuy ? 'text-green-trade' : 'text-red-trade'
                         )}>
-                          {isBuy ? '▲ Buy' : '▼ Sell'}
+                          {isBuy ? `▲ ${t('Buy')}` : `▼ ${t('Sell')}`}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -159,14 +155,14 @@ export function TradeHistoryPanel({ name }: { name: string }) {
                           'text-xs px-2 py-0.5 rounded-full font-medium',
                           actionStyle.className
                         )}>
-                          {actionStyle.label}
+                          {t(actionStyle.label)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-300">
                         {formatSize(trade.size, trade.symbol)}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-white">
-                        {formatPrice(trade.price)}
+                        {formatPrice(trade.price, locale)}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold">
                         {hasPnl ? (
@@ -182,7 +178,7 @@ export function TradeHistoryPanel({ name }: { name: string }) {
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-400 text-xs">
                         {trade.positionAfter === 0
-                          ? 'Flat'
+                          ? t('Flat')
                           : `${trade.positionAfter > 0 ? '+' : ''}${formatSize(trade.positionAfter, trade.symbol)}`}
                       </td>
                     </tr>
@@ -199,7 +195,7 @@ export function TradeHistoryPanel({ name }: { name: string }) {
                 disabled={loadingMore}
                 className="w-full text-sm text-slate-400 hover:text-white transition-colors disabled:opacity-40 py-1"
               >
-                {loadingMore ? 'Loading…' : 'Load More'}
+                {loadingMore ? t('Loading…') : t('Load More')}
               </button>
             </div>
           )}

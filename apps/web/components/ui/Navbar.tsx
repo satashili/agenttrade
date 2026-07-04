@@ -4,6 +4,8 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import { useMarketStore, useAuthStore } from '@/lib/store';
 import clsx from 'clsx';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
+import { useI18n } from '@/lib/i18n';
 
 const SYMBOLS = ['TSLA', 'AMZN', 'BTC'] as const;
 const DECIMALS: Record<string, number> = { BTC: 0, TSLA: 2, AMZN: 2 };
@@ -11,6 +13,7 @@ const DECIMALS: Record<string, number> = { BTC: 0, TSLA: 2, AMZN: 2 };
 export function Navbar() {
   const { prices } = useMarketStore();
   const { user, logout } = useAuthStore();
+  const { t, locale } = useI18n();
   const pathname = usePathname();
   const [stats, setStats] = useState<Record<string, { price?: number; changePct24h: number }>>({});
 
@@ -60,7 +63,7 @@ export function Navbar() {
 
   const navLinks = [
     { href: '/trade', label: 'Trade' },
-    { href: '/strategies', label: 'Strategies' },
+    { href: '/ai-agents', label: 'AI Agents' },
     { href: '/copy-trading', label: 'Copy Trade' },
     { href: '/leaderboard', label: 'Leaderboard' },
     { href: '/community/general', label: 'Community' },
@@ -88,7 +91,7 @@ export function Navbar() {
               <div key={sym} className="flex items-center gap-1.5" style={{ minWidth: '130px' }}>
                 <span className="text-slate-500 font-medium">{sym}</span>
                 <span className="text-white tabular-nums font-medium">
-                  {price ? `$${price.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })}` : '—'}
+                  {price ? `$${price.toLocaleString(locale, { minimumFractionDigits: d, maximumFractionDigits: d })}` : '—'}
                 </span>
                 <span className={clsx('text-[10px] tabular-nums', isUp ? 'text-[#0ECB81]' : 'text-[#F6465D]')}>
                   {pct !== 0 ? `${isUp ? '+' : ''}${pct.toFixed(2)}%` : ''}
@@ -111,19 +114,23 @@ export function Navbar() {
                   : 'text-slate-500 hover:text-slate-300'
               )}
             >
-              {link.label}
+              {t(link.label)}
             </Link>
           ))}
         </div>
 
         <div className="flex-1" />
 
+        <div className="md:hidden">
+          <LanguageSwitcher />
+        </div>
+
         {/* Mobile menu button */}
         <div className="md:hidden relative" ref={mobileMenuRef}>
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="text-slate-400 hover:text-white p-1 transition-colors"
-            aria-label="Menu"
+            aria-label={t('Menu')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               {mobileMenuOpen ? (
@@ -146,18 +153,22 @@ export function Navbar() {
                       : 'text-slate-400 hover:text-white hover:bg-white/5'
                   )}
                 >
-                  {link.label}
+                  {t(link.label)}
                 </Link>
               ))}
+              <div className="border-t border-border my-1" />
+              <div className="px-4 py-2">
+                <LanguageSwitcher compact />
+              </div>
               <div className="border-t border-border my-1" />
               {user ? (
                 <>
                   <Link href={`/u/${user.name}`} className="block px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5">
-                    Profile
+                    {t('Profile')}
                   </Link>
                   {user.ownedAgents && user.ownedAgents.length > 0 && (
                     <>
-                      <div className="px-4 pt-2 pb-1 text-[10px] text-slate-500 uppercase tracking-wider">My Agents</div>
+                      <div className="px-4 pt-2 pb-1 text-[10px] text-slate-500 uppercase tracking-wider">{t('My Agents')}</div>
                       {user.ownedAgents.map(agent => (
                         <Link
                           key={agent.id}
@@ -171,16 +182,16 @@ export function Navbar() {
                     </>
                   )}
                   <button onClick={logout} className="block w-full text-left px-4 py-2 text-sm text-slate-500 hover:text-white hover:bg-white/5">
-                    Logout
+                    {t('Logout')}
                   </button>
                 </>
               ) : (
                 <>
                   <Link href="/login" className="block px-4 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5">
-                    Login
+                    {t('Login')}
                   </Link>
                   <Link href="/register" className="block px-4 py-2 text-sm text-accent hover:bg-white/5">
-                    Sign up
+                    {t('Sign up')}
                   </Link>
                 </>
               )}
@@ -189,7 +200,10 @@ export function Navbar() {
         </div>
 
         {/* Auth */}
-        <div className="flex items-center gap-3">
+        <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:block">
+            <LanguageSwitcher />
+          </div>
           {user ? (
             <>
               {user.ownedAgents && user.ownedAgents.length === 1 && (
@@ -208,7 +222,7 @@ export function Navbar() {
                     className="text-xs text-[#0ECB81] hover:text-[#0ECB81]/80 flex items-center gap-1 font-medium"
                   >
                     <span className="text-[10px]">🤖</span>
-                    My Agents ({user.ownedAgents.length})
+                    {t('My Agents')} ({user.ownedAgents.length})
                     <svg
                       width="10" height="10" viewBox="0 0 24 24" fill="none"
                       stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
@@ -219,7 +233,7 @@ export function Navbar() {
                   </button>
                   {agentDropdownOpen && (
                     <div className="absolute right-0 top-full mt-2 w-52 glass-card-strong rounded-xl py-1.5 shadow-xl z-50">
-                      <div className="px-3 py-1 text-[10px] text-slate-500 uppercase tracking-wider">My Agents</div>
+                      <div className="px-3 py-1 text-[10px] text-slate-500 uppercase tracking-wider">{t('My Agents')}</div>
                       {user.ownedAgents.map(agent => (
                         <Link
                           key={agent.id}
@@ -242,12 +256,12 @@ export function Navbar() {
                 </span>
                 <span className="hidden sm:inline">{user.displayName || user.name}</span>
               </Link>
-              <button onClick={logout} className="text-[10px] text-slate-600 hover:text-slate-400">Logout</button>
+              <button onClick={logout} className="text-[10px] text-slate-600 hover:text-slate-400">{t('Logout')}</button>
             </>
           ) : (
             <>
-              <Link href="/login" className="text-xs text-slate-500 hover:text-white">Login</Link>
-              <Link href="/register" className="text-xs bg-gradient-to-r from-[#1E6FFF] to-[#7B61FF] hover:from-[#1558CC] hover:to-[#6B51EF] text-white px-3 py-1 rounded font-semibold glow-sm-blue">Sign up</Link>
+              <Link href="/login" className="text-xs text-slate-500 hover:text-white">{t('Login')}</Link>
+              <Link href="/register" className="text-xs bg-gradient-to-r from-[#1E6FFF] to-[#7B61FF] hover:from-[#1558CC] hover:to-[#6B51EF] text-white px-3 py-1 rounded font-semibold glow-sm-blue">{t('Sign up')}</Link>
             </>
           )}
         </div>

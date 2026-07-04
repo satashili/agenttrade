@@ -1,6 +1,7 @@
 'use client';
 import { useRef, useEffect, useState } from 'react';
 import { useBinanceTicker } from '@/hooks/useBinanceWS';
+import { useI18n } from '@/lib/i18n';
 
 interface Props { symbol: string; }
 
@@ -11,13 +12,14 @@ function fmtVol(v: number): string {
   return v.toFixed(2);
 }
 
-function fmtPrice(p: number, sym: string): string {
+function fmtPrice(p: number, sym: string, locale: string): string {
   const d = sym === 'BTC' ? 0 : 2;
-  return p.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  return p.toLocaleString(locale, { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
 export function TickerBar({ symbol }: Props) {
   const { ticker, priceDirection } = useBinanceTicker(symbol);
+  const { t, locale } = useI18n();
   const prevDir = useRef(priceDirection);
   const [flash, setFlash] = useState(false);
 
@@ -40,7 +42,7 @@ export function TickerBar({ symbol }: Props) {
     <div className="flex items-center gap-5 px-4 h-9 border-b border-border shrink-0 bg-[#0B0E11]" style={{ fontFamily: "'DM Mono', monospace" }}>
       <div className="flex items-center gap-2 shrink-0">
         <span className="text-sm font-bold text-white tracking-tight">{symbol}USDT</span>
-        <span className="text-[8px] bg-[#2b3139] text-slate-400 px-1 py-px rounded">SPOT</span>
+        <span className="text-[8px] bg-[#2b3139] text-slate-400 px-1 py-px rounded">{t('SPOT')}</span>
       </div>
 
       <div className="w-px h-4 bg-border" />
@@ -48,32 +50,32 @@ export function TickerBar({ symbol }: Props) {
       {ticker ? (
         <>
           <span className={`text-[15px] font-bold tabular-nums transition-colors duration-200 ${dirColor}`}>
-            {fmtPrice(ticker.lastPrice, symbol)}
+            {fmtPrice(ticker.lastPrice, symbol, locale)}
           </span>
 
           <div className="flex items-center gap-4 text-[11px]">
             <div>
-              <span className="text-slate-500 mr-1">24h Change</span>
+              <span className="text-slate-500 mr-1">{t('24h Change')}</span>
               <span className={`tabular-nums font-medium ${isUp ? 'text-[#0ECB81]' : 'text-[#F6465D]'}`}>
                 {isUp ? '+' : ''}{ticker.priceChangePct.toFixed(2)}%
               </span>
             </div>
             <div>
-              <span className="text-slate-500 mr-1">High</span>
-              <span className="tabular-nums text-slate-300">{fmtPrice(ticker.high24h, symbol)}</span>
+              <span className="text-slate-500 mr-1">{t('High')}</span>
+              <span className="tabular-nums text-slate-300">{fmtPrice(ticker.high24h, symbol, locale)}</span>
             </div>
             <div>
-              <span className="text-slate-500 mr-1">Low</span>
-              <span className="tabular-nums text-slate-300">{fmtPrice(ticker.low24h, symbol)}</span>
+              <span className="text-slate-500 mr-1">{t('Low')}</span>
+              <span className="tabular-nums text-slate-300">{fmtPrice(ticker.low24h, symbol, locale)}</span>
             </div>
             <div>
-              <span className="text-slate-500 mr-1">Vol(USDT)</span>
+              <span className="text-slate-500 mr-1">{t('Vol(USDT)')}</span>
               <span className="tabular-nums text-slate-300">{fmtVol(ticker.volume24h)}</span>
             </div>
           </div>
         </>
       ) : (
-        <span className="text-sm text-slate-600">Connecting...</span>
+        <span className="text-sm text-slate-600">{t('Connecting...')}</span>
       )}
     </div>
   );
